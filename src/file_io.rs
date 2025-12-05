@@ -1,0 +1,85 @@
+use std::path::Path;
+use std::fs::File;
+use std::io::{self, BufRead};
+
+pub struct VoxMol {
+    pub x: Vec<f32>,
+    pub y: Vec<f32>,
+    pub z: Vec<f32>,
+}
+
+impl VoxMol {
+    pub fn new() -> Self {
+        Self {
+            x: Vec::new(),
+            y: Vec::new(),
+            z: Vec::new(),
+        }
+    }
+
+    pub fn num_atoms(&self) -> usize {
+        if self.x.len() == self.y.len() && self.y.len() == self.z.len() {
+            self.x.len()
+        } else {
+            panic!("Inconsistent atom coordinate lengths");
+        }
+    }
+}
+
+pub fn read_mol2_file(path: &Path) -> Result<Vec<VoxMol>, std::io::Error> {
+    println!("Reading MOL2 file from: {:?}", path);
+
+    let file = File::open(path)?;
+    let reader = io::BufReader::new(file);
+
+    // Create Voxmol instance and a list to hold multiple molecules
+    let mut mol = VoxMol::new();
+    let mut l_mols: Vec<VoxMol> = Vec::new();
+
+    // Flags to track sections in MOL2 file
+    let mut in_atom_section: bool = false;
+
+    // Read file line by line
+    for line in reader.lines() {
+
+        let line = line?;
+
+        if line.starts_with("@<TRIPOS>ATOM") {
+            in_atom_section = true;
+            continue;
+        }
+
+        if line.starts_with("@<TRIPOS>BOND") {
+            in_atom_section = false;
+            continue;
+        }
+
+        if in_atom_section {
+            // Parse atom line to extract x, y, z coordinates
+            // Example line format (not actual MOL2 format):
+            // 1 C1 0.000 0.000 0.000 C
+
+            let parts: Vec<&str> = line.split_whitespace().collect();
+
+            if parts.len() >= 5 {
+                let x: f32 = parts[2].parse().unwrap_or(0.0);
+                let y: f32 = parts[3].parse().unwrap_or(0.0);
+                let z: f32 = parts[4].parse().unwrap_or(0.0);
+                mol.x.push(x);
+                mol.y.push(y);
+                mol.z.push(z);
+            }
+        }
+
+        if !in_atom_section && !mol.x.is_empty() {
+            // Finished reading one molecule's atoms
+            l_mols.push(mol);
+            // Reset for next molecule
+            mol = VoxMol::new();
+        }
+
+    }   
+
+    Ok(l_mols)
+    
+}

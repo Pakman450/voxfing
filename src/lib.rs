@@ -1,3 +1,6 @@
-pub fn greet() {
-    println!("Hello from the library!");
-}
+pub mod voxel;
+pub mod file_io;  // expose io to other modules
+
+
+pub use voxel::{voxelize, VoxelGrid};
+pub use file_io::read_mol2_file;  // optional re-export
