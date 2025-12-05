@@ -12,3 +12,5 @@ path = "src/bin/voxelize.rs"
 
 [dependencies]
 anyhow = "1"
+clap = { version = "4.2", features = ["derive"] }
+

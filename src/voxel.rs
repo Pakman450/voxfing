@@ -22,8 +22,6 @@ impl VoxelGrid {
 
 }
 
-
-
 // Example "voxelizer": fills grid with a single value
 pub fn voxelize(
     l_mols: Vec<VoxMol>,
@@ -32,12 +30,17 @@ pub fn voxelize(
     x0: f32,
     y0: f32,
     z0: f32,
-) -> VoxelGrid {
+) -> Vec::<VoxelGrid> {
 
-    let mut grid = VoxelGrid::new(dims); // 4×4×4 grid
+    // create a list of voxel grids based on number of molecules
+
+    let mut grids = Vec::<VoxelGrid>::new();
 
 
     for mol in l_mols.iter() {
+
+        let mut grid = VoxelGrid::new(dims);
+
         for atom_idx in 0..mol.num_atoms() {
             let x = mol.x[atom_idx];
             let y = mol.y[atom_idx];
@@ -47,15 +50,23 @@ pub fn voxelize(
             let iy = ((y - y0) / rs).floor() as usize;
             let iz = ((z - z0) / rs).floor() as usize;
             let index = grid.voxel_index(ix, iy, iz);
-            grid.data[index] = 1; // Mark voxel as occupied
+            grid.data[index] += 1; // Mark voxel as occupied
         }
+
+        grids.push(grid);
     }
 
+    let grid = &grids[0];  // for now just return the first grid
     // print out the number of occupied voxels
     let occupied_voxels = grid.data.iter().filter(|&&v| v > 0).count();
     println!("Number of occupied voxels: {}", occupied_voxels);
 
-    grid
+    // print out the sum of all voxel values
+    let voxel_sum: usize = grid.data.iter().map(|&v| v as usize
+    ).sum();
+    println!("Sum of all voxel values: {}", voxel_sum);
+
+    grids
 }
 
 

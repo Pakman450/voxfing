@@ -1,63 +1,57 @@
 use voxelizer::voxelize;
 use voxelizer::read_mol2_file;
 
-use std::env;
 use std::path::{Path};
+
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Path to the MOL2 file
+    #[arg(short, long)]
+    path: String,
+
+    /// Dimensions of the voxel grid (x, y, z), comma separated
+    #[arg(short, long, value_delimiter = ',', default_value = "100,100,100")]
+    dims: Vec<usize>,
+
+    /// resolution of the voxel grid
+    #[arg(short, long, default_value_t = 0.125)]
+    resolution: f32,
+
+    /// target origin x0
+    #[arg(short, long, value_delimiter = ',', default_value = "0.0,0.0,0.0")]
+    origin: Vec<f32>,
+
+}
+
 
 
 fn main() {
 
-    let args: Vec<String> = env::args().collect(); // get CLI args as Vec
+    let args = Args::parse();
 
-    // if args.len() < 2 {
-    //     eprintln!("Usage: voxelize <value>");
-    //     return;
-    // }
+    // Argument unpacking
+    let file_path: String = args.path;
+    let dimx = args.dims[0];
+    let dimy = args.dims[1];
+    let dimz = args.dims[2];
+    let x0 = args.origin[0];
+    let y0 = args.origin[1];       
+    let z0 = args.origin[2];
+    let resolution = args.resolution;
 
-    let file_path: String = args[1].parse().unwrap_or_else(|_| {
-        eprintln!("Invalid value: {}", args[1]);
-        std::process::exit(1);
-    });
-
-    let dimx = args[2].parse().unwrap_or_else(|_| {
-        eprintln!("Invalid value: {}", args[2]);
-        std::process::exit(1);
-    });
-    let dimy = args[3].parse().unwrap_or_else(|_| {
-        eprintln!("Invalid value: {}", args[3]);
-        std::process::exit(1);
-    });
-    let dimz = args[4].parse().unwrap_or_else(|_| {
-        eprintln!("Invalid value: {}", args[4]);
-        std::process::exit(1);
-    });
-
-
-    let resolution: f32 = args[5].parse().unwrap_or_else(|_| {
-        eprintln!("Invalid value: {}", args[5]);
-        std::process::exit(1);
-    });
-
-
-    
+    // Read MOL2 file
     let path = Path::new(&file_path);
 
-    // match read_mol2_file(path) {
-    //     Ok(l_mols) => {
-    //         for mol in l_mols.iter() {
-    //             println!("{:?}", mol.x);
-    //             println!("{:?}", mol.y);
-    //             println!("{:?}", mol.z);
-    //             println!("Number of atoms: {:?}", mol.num_atoms());
-    //         }
-    //     }
-    //     Err(e) => eprintln!("Error reading file: {}", e),
-    // }
-
+    // Get molecule list
     let l_mols = read_mol2_file(path).expect("Failed to read MOL2 file");
 
+    // Voxelization
+    let grids = voxelize(l_mols, [dimx, dimy, dimz], resolution, x0, y0, z0); 
 
-
-    let grid = voxelize(l_mols, [dimx, dimy, dimz], resolution, 0.0, 0.0, 0.0); 
-    println!("First 8 values: {:?}", &grid.data[..8]);
+    // Print some voxel grid info
+    println!("Voxel Grid Dimensions: {:?}", grids[0].dims);
+    // println!("First 100 values: {:?}", &grids[0].data);
 }
