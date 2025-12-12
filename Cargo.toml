@@ -14,3 +14,4 @@ path = "src/bin/voxelize.rs"
 anyhow = "1"
 clap = { version = "4.2", features = ["derive"] }
 nalgebra = "0.32"
+rand = "0.8"
