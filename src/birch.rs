@@ -5,6 +5,28 @@ use std::any::TypeId;
 use std::rc::Rc;
 use std::cell::RefCell;
 
+
+// NOTE: Original did something different here. 
+// This function doesn't take in max_branches or n_features.
+// But because the original Code language can mutate any variable
+// with any other data type. We need max_branches and n_featires 
+// to retern a generated Dmatrix for self.centroid. 
+fn calc_centroid( ls: &Vec<f32>, nj: u32, max_branches: usize, n_features: usize) -> DMatrix<f32> {
+    
+    debug_assert_eq!(ls.len(), n_features);
+
+    let threshold = nj as f32 * 0.5;
+    let mut centroid = DMatrix::<f32>::zeros(max_branches + 1, n_features);
+
+    for (j, &x) in ls.iter().enumerate() {
+        centroid[(0, j)] = if x >= threshold { 1.0 } else { 0.0 };
+    }
+
+    centroid
+}
+
+
+
 #[derive(Debug, Clone)]
 struct BFNode {
     threshold: f32,
@@ -99,7 +121,7 @@ impl BFNode {
         &mut self,
         subcluster: BFSubcluster,
         set_bits: f32,
-        parent: Option<Rc<RefCell<BFNode>>>,
+        mut parent: BFSubcluster,
         singly: bool
     ) -> bool {
 
@@ -147,12 +169,43 @@ impl BFNode {
             }
         }
 
-        let closest_subcluster = &self.subclusters.as_ref().unwrap()[closest_index.0];
+        let mut closest_subcluster = self.subclusters.as_ref().unwrap()[closest_index.0].clone();
 
+        if !closest_subcluster.child.is_none() {
+            println!("ee2");
+            parent = closest_subcluster.clone();
+
+            let split_child = 
+                closest_subcluster.child.as_ref().unwrap().borrow_mut().insert_bf_subcluster(
+                    subcluster.clone(),
+                    set_bits,
+                    parent.clone(),
+                    singly
+                );
+
+            if !split_child {
+                println!("ee2");
+                let (row_idx, col_idx) = closest_index; // tuple (usize, usize)
+
+                closest_subcluster.update(&subcluster, self.max_branches, self.n_features );
+
+
+                self.init_centroids.as_mut().unwrap()
+                    .row_mut(row_idx)
+                    .copy_from(&self.subclusters.as_ref().unwrap()[row_idx].centroid.clone().unwrap());
+                
+                self.centroids.as_mut().unwrap()
+                    .row_mut(row_idx)
+                    .copy_from(&self.subclusters.as_ref().unwrap()[row_idx].centroid.clone().unwrap());
+                return false
+            } else{
+                return false
+            }
+        }
 
         println!("closest_index = {:?}", closest_index);
-        println!("closest_subcluster {:?} ", closest_subcluster);
-        // println!("sim_matrx{}", sim_matrix);
+        // println!("closest_subcluster {:?} ", closest_subcluster);
+        println!("sim_matrx{}", sim_matrix);
         // Placeholder implementation
         true
     }
@@ -162,7 +215,7 @@ impl BFNode {
 struct BFSubcluster {
     nj: u32,
     ls: Option<Vec<f32>>,
-    mols: Vec::<u32>,
+    mols: Option<Vec<u32>>,
     cj: Option<Vec<f32>>,
     child: Option<Rc<RefCell<BFNode>>>,
     parent: Option<Rc<RefCell<BFNode>>>,
@@ -179,7 +232,7 @@ impl BFSubcluster {
             BFSubcluster {
                 nj: 0,
                 ls: Some(linear_sum.clone().unwrap()),
-                mols: Vec::<u32>::new(),
+                mols: Some(Vec::<u32>::new()),
                 cj: None,
                 child: None,
                 parent: None,
@@ -200,7 +253,7 @@ impl BFSubcluster {
             BFSubcluster {
                 nj: 1,
                 ls: Some(linear_sum.clone().unwrap()),
-                mols: mol_indices,
+                mols: Some(mol_indices),
                 cj: Some(linear_sum.clone().unwrap()),
                 child: None,
                 parent: None,
@@ -209,6 +262,35 @@ impl BFSubcluster {
 
         }
         
+    }
+
+    pub fn update(& mut self, subcluster: &BFSubcluster, max_branches: usize, n_features: usize) {
+
+
+        self.nj += subcluster.nj;
+
+        if let (Some(a), Some(b)) = (self.ls.as_mut(), subcluster.ls.as_ref()) {
+            assert_eq!(a.len(), b.len());
+
+            for (x, y) in a.iter_mut().zip(b.iter()) {
+                *x += *y;
+            }
+        }
+
+        if let (Some(a), Some(b)) = (self.mols.as_mut(), subcluster.mols.as_ref()) {
+            assert_eq!(a.len(), b.len());
+
+            for (x, y) in a.iter_mut().zip(b.iter()) {
+                *x += *y;
+            }
+        }
+
+        // NOTE: Original did something different here. 
+        // This function doesn't take in max_branches or n_features.
+        // But because the original Code language can mutate any variable
+        // with any other data type. We need max_branches and n_featires 
+        // to retern a generated Dmatrix for self.centroid. 
+        self.centroid = Some(calc_centroid(&self.ls.as_ref().unwrap(), self.nj, max_branches, n_features));
     }
 
 
@@ -271,11 +353,6 @@ impl VoxBirch {
                     TypeId::of::<f32>(),
                 ))));
 
-
-            // self.root = root;
-            // self.dummy_leaf = dummy_leaf;
-
-
             self.dummy_leaf
                 .as_ref()
                 .unwrap()
@@ -307,7 +384,10 @@ impl VoxBirch {
             let split = self.root.as_ref().unwrap().borrow_mut().insert_bf_subcluster(
                 subcluster.clone(),
                 set_bits,
-                subcluster.parent,
+                // Here, BitBirch feeds in subcluster.parent_
+                // But since Rust is a strongly typed language
+                // we must send in BFSubcluster rather than. BFNode.
+                subcluster.clone(),
                 singly
             );
 
