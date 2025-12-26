@@ -32,8 +32,7 @@ pub fn voxelize(
     rs: f32,
     x0: f32,
     y0: f32,
-    z0: f32,
-    method: String,
+    z0: f32
 ) -> Vec::<VoxelGrid> {
 
     // create a list of voxel grids based on number of molecules
@@ -58,12 +57,9 @@ pub fn voxelize(
             let index = grid.voxel_index(ix, iy, iz);
 
             
-            if method == "binary" {
-                grid.data[index] = 1;
-            } else {
-                grid.data[index] += 1;
 
-            }
+            grid.data[index] += 1;
+
         }
 
         grids.push(grid);

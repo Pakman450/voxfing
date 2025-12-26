@@ -476,7 +476,7 @@ impl BFNode {
 
 
         if !self.subclusters.as_mut().unwrap()[row_idx].child.is_none() {
-            println!("ee2");
+
             parent = self.subclusters.as_mut().unwrap()[row_idx].clone();
 
             let split_child = 
@@ -492,13 +492,14 @@ impl BFNode {
 
                 self.subclusters.as_mut().unwrap()[row_idx].update(&subcluster, self.max_branches, self.n_features );
 
+                // NOTE: this saves the first row of centroids
                 self.init_centroids.as_mut().unwrap()
                     .row_mut(row_idx)
-                    .copy_from(&self.subclusters.as_ref().unwrap()[row_idx].centroid.clone().unwrap());
+                    .copy_from(&self.subclusters.as_ref().unwrap()[row_idx].centroid.clone().unwrap().row(0));
                 
                 self.centroids.as_mut().unwrap()
                     .row_mut(row_idx)
-                    .copy_from(&self.subclusters.as_ref().unwrap()[row_idx].centroid.clone().unwrap());
+                    .copy_from(&self.subclusters.as_ref().unwrap()[row_idx].centroid.clone().unwrap().row(0));
                 return false
             } else {
 
@@ -527,12 +528,17 @@ impl BFNode {
                 subcluster.clone(), max_branches, threshold
             );
             
-            if merged {
-                let closest_subcluster = self.subclusters.as_mut().unwrap(); // Unwrap Option to get a mutable reference
-                let row = &closest_subcluster[row_idx].centroid;
+            // println!("MERGED? {}", merged);
 
-                self.centroids.as_mut().unwrap().row_mut(row_idx).copy_from(&row.clone().unwrap());
-                self.init_centroids.as_mut().unwrap().row_mut(row_idx).copy_from(&row.clone().unwrap());
+
+            if merged {
+
+                let closest_subcluster = self.subclusters.as_mut().unwrap(); // Unwrap Option to get a mutable reference
+                let row = & closest_subcluster[row_idx].centroid;
+
+                // NOTE: this saves the first row of centroids
+                self.centroids.as_mut().unwrap().row_mut(row_idx).copy_from(&row.clone().unwrap().row(0));
+                self.init_centroids.as_mut().unwrap().row_mut(row_idx).copy_from(&row.clone().unwrap().row(0));
 
                 if !singly{
                     // closest_subcluster.parent = ps; 
@@ -559,12 +565,6 @@ impl BFNode {
             }
 
         }
-
-
-        println!("closest_index = {:?}", closest_index);
-        // println!("closest_subcluster {:?} ", closest_subcluster);
-        println!("sim_matrx{}", sim_matrix);
-        // Placeholder implementation
         true
     }
 }
@@ -587,9 +587,10 @@ impl BFSubcluster {
         // centroid__ = 
         // Some(DMatrix::from_row_slice(1, n, &v))
         if linear_sum == None {
+
             BFSubcluster {
                 nj: 0,
-                ls: Some(linear_sum.clone().unwrap()),
+                ls: Some(vec![0.0; n_features]),
                 mols: Some(Vec::<u32>::new()),
                 cj: None,
                 child: None,
@@ -642,7 +643,6 @@ impl BFSubcluster {
         // This is not the same as elementwise increments. This is an extension between two
         // arrays. 
         if let (Some(a), Some(b)) = (self.mols.as_mut(), subcluster.mols.as_ref()) {
-            assert_eq!(a.len(), b.len());
 
             a.extend_from_slice(b);
         }
@@ -671,7 +671,7 @@ impl BFSubcluster {
         let new_centroid = calc_centroid(&new_ls, new_n, max_branches, new_ls.len() );
         
         // NOTE: this needs to be changed where set_merge can called anywhere.
-        let merge_accept = set_merge(MergeCriterion::Tolerance, 0.0);
+        let merge_accept = set_merge(MergeCriterion::Tolerance, 0.7);
 
         // Collect the row into a Vec<f32> instead of trying to call as_slice()
         let row_as_vec: Vec<f32> = new_centroid.row(0).iter().cloned().collect();
@@ -691,7 +691,6 @@ impl BFSubcluster {
             self.centroid = Some(new_centroid); 
             // self.mol_indices = self.mol_indices + nominee_cluster.mol_indices;
             if let (Some(a), Some(b)) = (self.mols.as_mut(), nominee_cluster.mols.as_ref()) {
-                assert_eq!(a.len(), b.len());
 
                 a.extend_from_slice(b);
             }
@@ -784,7 +783,9 @@ impl VoxBirch {
         // }
 
         for iter in 0..grids.nrows() {
-            
+
+            // println!("ITERATION: {}", iter);
+             
             let grid: Option<Vec<f32>> = Some(grids.row(iter).iter().copied().collect());
             let set_bits: f32 = grids.row(iter).sum();
             let mol_indices: Vec<u32> = vec![self.index_tracker];
@@ -859,9 +860,11 @@ impl VoxBirch {
             }
             self.index_tracker += 1;
         }
+        // NOTE: This needs to be completed. 
+        // ignored because I wanted to complete the algorithm quickly
 
-        // // Get leaves by calling get_leaves()
-        // let leaves = self.get_leaves();
+        // Get leaves by calling get_leaves()
+        let leaves = self.get_leaves();
 
         // // Concatenate the centroids of each leaf node
         // for leaf in leaves {

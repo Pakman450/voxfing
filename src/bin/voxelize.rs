@@ -27,11 +27,7 @@ struct Args {
 
     /// target origin x0 y0 z0, comma separated
     #[arg(short, long, value_delimiter = ',', default_value = "0.0,0.0,0.0")]
-    origin: Vec<f32>,
-
-    /// target origin x0 y0 z0, comma separated
-    #[arg(short, long, default_value = "binary")]
-    method: String,
+    origin: Vec<f32>
 
 }
 
@@ -50,7 +46,7 @@ fn main() {
     let y0 = args.origin[1];       
     let z0 = args.origin[2];
     let resolution = args.resolution;
-    let method = args.method;
+    // let method = args.method;
 
     // Read MOL2 file
     let path = Path::new(&file_path);
@@ -59,29 +55,30 @@ fn main() {
     let l_mols = read_mol2_file(path).expect("Failed to read MOL2 file");
 
     // Voxelization
-    let grids = voxelize(l_mols, [dimx, dimy, dimz], resolution, x0, y0, z0, method.clone()); 
+    let grids = voxelize(l_mols, [dimx, dimy, dimz], resolution, x0, y0, z0); 
 
     // Print some voxel grid info
     println!("Voxel Grid Dimensions: {:?}", grids[0].dims);
 
-    if method == "binary" {
-        println!("Itani Similarity Score: {}", itani_bin(&grids));
-    } else if method == "real" {
-        let itani_r = itani_real(&grids);
-        println!("Itani Similarity Score: {}", itani_r);
-        println!("Diameter: {}", diameter_real(itani_r));
-    }
+    let mut vb = VoxBirch::new(0.5, 50);
 
+    // Get the number of rows (which is the number of VoxelGrids)
+    let num_rows = grids.len();
+    
+    // Get the number of columns (which is the length of the data in each VoxelGrid)
+    let num_cols = grids[0].data.len();  // Assuming all VoxelGrids have the same length of data
 
-    let mut vb = VoxBirch::new(0.5, 5);
-    let mut randmat: DMatrix<f32> = DMatrix::zeros(10, 10);
-        // Fill each element with a random float between 0.0 and 1.0
-    let mut rng = rand::thread_rng();
-    for i in 0..randmat.nrows() {
-        for j in 0..randmat.ncols() {
-            randmat[(i, j)] = rng.gen::<f32>(); // gen() generates a float in [0,1)
+    // Create the DMatrix with the correct size
+    let mut input_matrix: DMatrix<f32> = DMatrix::zeros(num_rows, num_cols);
+
+    // Fill the matrix with the data from each VoxelGrid
+    for (i, grids) in grids.iter().enumerate() {
+        for (j, &value) in grids.data.iter().enumerate() {
+            input_matrix[(i, j)] = value as f32; // Convert u8 to f32 and assign
         }
     }
-    vb.fit(&randmat, true);
+
+
+    vb.fit(&input_matrix, true);
         
 }
