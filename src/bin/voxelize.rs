@@ -1,14 +1,11 @@
 use voxelizer::voxelize;
 use voxelizer::read_mol2_file;
-use voxelizer::itani_bin;
-use voxelizer::itani_real;
-use voxelizer::diameter_real;
+
 use voxelizer::birch::VoxBirch;
 
 use std::path::{Path};
 use nalgebra::DMatrix;
 use clap::Parser;
-use rand::Rng;  
 use std::time::{Instant};
 
 #[derive(Parser)]
@@ -43,9 +40,31 @@ struct Args {
 
 fn main() {
 
+
+
     // Get the current time
     let start_time = Instant::now();
 
+
+
+    let ascii_art = r#"
+                                     ,---,.                            ,---,     
+       ,---.                       ,'  .'  \  ,--,                   ,--.' |     
+      /__./|   ,---.             ,---.' .' |,--.'|    __  ,-.        |  |  :     
+ ,---.;  ; |  '   ,'\ ,--,  ,--, |   |  |: ||  |,   ,' ,'/ /|        :  :  :     
+/___/ \  | | /   /   ||'. \/ .`| :   :  :  /`--'_   '  | |' | ,---.  :  |  |,--. 
+\   ;  \ ' |.   ; ,. :'  \/  / ; :   |    ; ,' ,'|  |  |   ,'/     \ |  :  '   | 
+ \   \  \: |'   | |: : \  \.' /  |   :     \'  | |  '  :  / /    / ' |  |   /' : 
+  ;   \  ' .'   | .; :  \  ;  ;  |   |   . ||  | :  |  | ' .    ' /  '  :  | | | 
+   \   \   '|   :    | / \  \  \ '   :  '; |'  : |__;  : | '   ; :__ |  |  ' | : 
+    \   `  ; \   \  /./__;   ;  \|   |  | ; |  | '.'|  , ; '   | '.'||  :  :_:,' 
+     :   \ |  `----' |   :/\  \ ;|   :   /  ;  :    ;---'  |   :    :|  | ,'     
+      '---"          `---'  `--` |   | ,'   |  ,   /        \   \  / `--''       
+                                 `----'      ---`-'          `----'              
+    "#;
+
+    // Print the ASCII art
+    println!("{}", ascii_art);
     let args = Args::parse();
 
     // Argument unpacking
@@ -155,7 +174,7 @@ fn main() {
     vb.fit(&input_matrix, true);
 
 
-    
+
     // Get the elapsed time
     let duration = start_time.elapsed();
 

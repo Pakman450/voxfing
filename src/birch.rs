@@ -1,13 +1,12 @@
-use nalgebra::{DMatrix, DVector, RowVector, RowDVector, VecStorage, U1, Dyn};
+use nalgebra::{DMatrix, RowVector, RowDVector, VecStorage, U1, Dyn};
 
-use crate::voxel::VoxelGrid;
 use std::any::TypeId;
 use std::rc::Rc;
 use std::cell::RefCell;
 
 #[derive(Debug)]
 enum Parent {
-    Node(BFNode),
+    // Node(BFNode),
     Subcluster(BFSubcluster)
 }
 
@@ -253,7 +252,7 @@ fn split_node(node_child: &Option<Rc<RefCell<BFNode>>>, threshold: f32, max_bran
 
     let (
         farthest_idx1,
-        farthest_idx2,
+        _,
         node1_dist,
         node2_dist
     ) = max_separation(&node.centroids.clone().unwrap(), max_branches);
@@ -375,7 +374,7 @@ impl BFNode {
         // This code copies all centroids at once.
         // I wonder why would you do this? 
         // maybe there is a reason to overwrite all centroids at once.
-        self.centroids.as_mut().unwrap().rows_mut(0, n_samples+1).copy_from(&self.init_centroids.as_ref().unwrap().slice(
+        self.centroids.as_mut().unwrap().rows_mut(0, n_samples+1).copy_from(&self.init_centroids.as_ref().unwrap().view(
             (0,0), 
             (n_samples+1, self.init_centroids.as_ref().unwrap().ncols())
         ));
@@ -565,7 +564,7 @@ impl BFNode {
             }
 
         }
-        true
+        // true // Rust compiler states it is an unreachable expression
     }
 }
 
@@ -574,7 +573,7 @@ struct BFSubcluster {
     nj: u32,
     ls: Option<Vec<f32>>,
     mols: Option<Vec<u32>>,
-    cj: Option<Vec<f32>>,
+    // cj: Option<Vec<f32>>,
     child: Option<Rc<RefCell<BFNode>>>,
     parent: Option<Rc<RefCell<Parent>>>,
     centroid: Option<DMatrix<f32>>,
@@ -592,7 +591,7 @@ impl BFSubcluster {
                 nj: 0,
                 ls: Some(vec![0.0; n_features]),
                 mols: Some(Vec::<u32>::new()),
-                cj: None,
+                // cj: None,
                 child: None,
                 parent: None,
                 centroid:  Some(DMatrix::<f32>::zeros(max_branches+1, n_features)),
@@ -613,7 +612,7 @@ impl BFSubcluster {
                 nj: 1,
                 ls: Some(linear_sum.clone().unwrap()),
                 mols: Some(mol_indices),
-                cj: Some(linear_sum.clone().unwrap()),
+                // cj: Some(linear_sum.clone().unwrap()),
                 child: None,
                 parent: None,
                 centroid: Some(centroid_zeros),

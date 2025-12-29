@@ -99,25 +99,25 @@ pub fn diameter_real(itani_real: f32) -> f32{
 
 // radius function and its helper functions
 // NOTE: not tested
-fn centroid(
-    ls: &Vec<f32>, 
-    nj: u32,
-    dims: [usize; 3]
-) -> VoxelGrid {
+// fn centroid(
+//     ls: &Vec<f32>, 
+//     nj: u32,
+//     dims: [usize; 3]
+// ) -> VoxelGrid {
 
-    let mut cj: Vec<f32> = vec![0.0; ls.len()];
+//     let mut cj: Vec<f32> = vec![0.0; ls.len()];
 
-    let mut cj_grid = VoxelGrid::new(dims);
+//     let mut cj_grid = VoxelGrid::new(dims);
 
-    for i in 0..ls.len(){
-        cj[i] = ls[i]/nj as f32 + 0.5;
-        cj[i] = cj[i].floor();
-    }
+//     for i in 0..ls.len(){
+//         cj[i] = ls[i]/nj as f32 + 0.5;
+//         cj[i] = cj[i].floor();
+//     }
 
-    cj_grid.data = cj.iter().map(|&x| x as u8).collect();
+//     cj_grid.data = cj.iter().map(|&x| x as u8).collect();
 
-    cj_grid
-}
+//     cj_grid
+// }
 
 // NOTE: not tested
 pub fn radius_real(
