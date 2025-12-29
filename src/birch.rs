@@ -1,4 +1,4 @@
-use nalgebra::{DMatrix, RowVector, VecStorage, U1, Dyn};
+use nalgebra::{DMatrix, DVector, RowVector, RowDVector, VecStorage, U1, Dyn};
 
 use crate::voxel::VoxelGrid;
 use std::any::TypeId;
@@ -670,8 +670,8 @@ impl BFSubcluster {
         let new_n = self.nj + nominee_cluster.nj;
         let new_centroid = calc_centroid(&new_ls, new_n, max_branches, new_ls.len() );
         
-        // NOTE: this needs to be changed where set_merge can called anywhere.
-        let merge_accept = set_merge(MergeCriterion::Tolerance, 0.7);
+        // TODO: this needs to be changed where set_merge can called anywhere.
+        let merge_accept = set_merge(MergeCriterion::Radius, 0.05);
 
         // Collect the row into a Vec<f32> instead of trying to call as_slice()
         let row_as_vec: Vec<f32> = new_centroid.row(0).iter().cloned().collect();
@@ -710,7 +710,8 @@ pub struct VoxBirch {
     first_call: bool,
     root: Option<Rc<RefCell<BFNode>>>,
     dummy_leaf: Option<Rc<RefCell<BFNode>>>,
-    subcluster_centers: Option<Vec<DMatrix<f32>>>
+    subcluster_centers: Option<Vec<RowDVector<f32>>>,
+    n_features_out: usize
 }
 
 
@@ -723,7 +724,8 @@ impl VoxBirch {
             first_call: true,
             root: None,
             dummy_leaf: None,
-            subcluster_centers: None
+            subcluster_centers: None,
+            n_features_out: 0
         }
     }
 
@@ -732,7 +734,6 @@ impl VoxBirch {
     pub fn fit(&mut self, grids : &DMatrix<f32>, singly: bool) -> &mut VoxBirch {
 
 
-        println!("Fitting BIRCH model to voxel grids...");
 
         let n_features = grids.ncols();
 
@@ -860,37 +861,34 @@ impl VoxBirch {
             }
             self.index_tracker += 1;
         }
-        // NOTE: This needs to be completed. 
+        // TODO: This needs to be completed. 
         // ignored because I wanted to complete the algorithm quickly
 
         // Get leaves by calling get_leaves()
         let leaves = self.get_leaves();
 
-        // // Concatenate the centroids of each leaf node
-        // for leaf in leaves {
-        //     if let Some(leaf_centroids) = &leaf.borrow().centroids {
-        //         self.subcluster_centers.unwrap().extend_from_slice(leaf_centroids);
-        //     }
-        // }
+        // self.subcluster_centers = Some(leaves);
+        // Concatenate the centroids of each leaf node
+        let mut rows: Vec<RowDVector<f32>> = Vec::new();
 
-        // // // Assuming the centroids are a matrix and need to be reshaped
-        // // self.subcluster_centers = Some(centroids);
+        for leaf in leaves {
+            let leaf_ref = leaf.borrow();
+            if let Some(c) = &leaf_ref.centroids {
+                for i in 0..c.nrows() {
+                    rows.push(c.row(i).into_owned());
+                }
+            }
+        }
 
-        // // Set the number of features
-        // if let Some(centroids) = &self.subcluster_centers {
-        //     self._n_features_out = centroids.nrows();
-        // }
+        // let centroids = DMatrix::from_rows(&rows);
+
+        // Assuming the centroids are a matrix and need to be reshaped
+        self.subcluster_centers = Some(rows.clone());
+
+        self.n_features_out = self.subcluster_centers.as_ref().unwrap().len();
         
         self.first_call = false;
         return self
-
-
-        // centroids = np.concatenate([leaf.centroids_ for leaf in self._get_leaves()])
-        // self.subcluster_centers_ = centroids
-        // self._n_features_out = self.subcluster_centers_.shape[0]
-        
-        // self.first_call = False
-        // return self
     }
 
     fn get_leaves(&self) -> Vec<Rc<RefCell<BFNode>>> {
