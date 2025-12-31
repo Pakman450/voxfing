@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::fs::File;
-use std::io::{self, BufRead};
-
+use std::io::{self, BufRead, BufWriter, Write, Result};
 pub struct VoxMol {
     pub x: Vec<f32>,
     pub y: Vec<f32>,
@@ -26,7 +25,7 @@ impl VoxMol {
     }
 }
 
-pub fn read_mol2_file(path: &Path) -> Result<Vec<VoxMol>, std::io::Error> {
+pub fn read_mol2_file(path: &Path) -> Result<Vec<VoxMol>> {
     println!("Reading MOL2 file from: {:?}", path);
 
     let file = File::open(path)?;
@@ -82,4 +81,26 @@ pub fn read_mol2_file(path: &Path) -> Result<Vec<VoxMol>, std::io::Error> {
 
     Ok(l_mols)
     
+}
+
+pub fn write_cluster_mol_ids(path: &Path, cluster_mol_ids: &Vec<Vec<u32>>) -> Result<()>  {
+    
+    println!("Writing cluster mol ids to: {:?}", path);
+
+    let file = File::create(path)?;
+    let mut writer = BufWriter::new(file);
+
+    for (index, row) in cluster_mol_ids.iter().enumerate() {
+        for (i, val) in row.iter().enumerate() {
+            if i == 0 {
+                write!(writer, "index: {}\n", index)?;
+            }
+            write!(writer, "mol: {}\n", val)?;
+        }
+        writeln!(writer)?;
+    }
+
+    Ok(())
+
+
 }
