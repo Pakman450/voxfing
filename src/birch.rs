@@ -108,6 +108,14 @@ fn jt_isim(c_total: &Vec<f32>, n_objects: usize) -> f32 {
     // Compute the variable a
     let a = (sum_kqsq - sum_kq) / 2.0;
 
+    println!("jt_isim = {} : a = {}, sum_kq = {}, sum_kqsq = {}, n_objects = {}", 
+        a / (a + (n_objects as f32) * sum_kq - sum_kqsq),
+        a, 
+        sum_kq,
+        sum_kqsq, 
+        n_objects
+        );
+
     // Return the iSIM Jaccard-Tanimoto value
     a / (a + (n_objects as f32) * sum_kq - sum_kqsq)
 }
@@ -119,20 +127,81 @@ fn max_separation(centroids: &DMatrix<f32>, max_branches: usize) -> (usize, usiz
     let n_samples: u32 = centroids.nrows().try_into().unwrap();
     // NOTE: row_sum adds all rows in an elementwise fashion per column. very confusing... 
     let linear_sum: Vec<f32> = centroids.row_sum().as_slice().to_vec();
-    let centroid = calc_centroid( &linear_sum, n_samples, max_branches, centroids.ncols() );
+    let has_nonzero2 = linear_sum
+        .iter()
+        .any(|&x| x != 0.0);
+    println!("&linear_sum in max_seperation has nonzero? {}", has_nonzero2);
 
+    println!("linear_sum in max_seperation: {:?}", linear_sum);
+
+    // BUG: Here we know that calc_centroids returns zero.
+    let mut centroid = calc_centroid( &linear_sum, n_samples, max_branches, centroids.ncols() );
+    
+    // If centroid is all zeros, pick the most central molecule via medoid calculation
+    // as centroid. We should make this robust to all zero centroids.
+    // Also, we need to make sure centroid is not all zeros.
+    // Also, we need to make a medoid calculation function, which is shown below.
+    let centroid_is_zero = centroid.row(0).iter().all(|&x| x == 0.0);
+    if centroid_is_zero {
+        let pop_counts: Vec<f32> = centroids.column_sum().as_slice().to_vec();
+
+        let mut best_idx = 0;
+        let mut best_score = -1.0;
+
+        for i in 0..centroids.nrows() {
+            let a_i: Vec<f32> =
+                (centroids * centroids.row(i).transpose()).as_slice().to_vec();
+
+            let sims: Vec<f32> = a_i.iter()
+                .zip(pop_counts.iter())
+                .map(|(&a, &p)| a / (p + pop_counts[i] - a))
+                .collect();
+
+            let avg_sim: f32 = sims.iter().sum::<f32>() / sims.len() as f32;
+
+            if avg_sim > best_score {
+                best_score = avg_sim;
+                best_idx = i;
+            }
+        }
+        centroid.row_mut(0).copy_from(&centroids.row(best_idx));
+
+    }
+    
+    let has_nonzero1 = centroid
+        .iter()
+        .any(|&x| x != 0.0);
+    println!("&centroid in max_seperation has nonzero? {}", has_nonzero1);
+  
     // Get the similarity of each molecule to the centroid
     // NOTE: column_sum adds all cols in an elementwise fashion per row. very confusing... 
     let pop_counts: Vec<f32> = centroids.column_sum().as_slice().to_vec();
+
+    println!("pop_counts: {:?}", pop_counts);
+
+    // println!("centroids: {:?}", centroids);
+    // println!("centroid: {:?}", centroid);
 
     //This needs to calculate dot products for each row of centroids
     // with centroid. centrpoid has a shape of n_features of cols
     let a_centroid: Vec<f32> = (centroids * centroid.transpose()).as_slice().to_vec(); 
 
+    let has_nonzeroz = a_centroid
+        .iter()
+        .any(|&x| x != 0.0);
+    println!("&a_centroid in max_seperation has nonzero? {}", has_nonzeroz);
+   
+    println!("a_centroid: {:?}", a_centroid);
+
     let sims_med: Vec<f32> = a_centroid.iter()
         .zip(pop_counts.iter())
         .map(|(&a, &p)| a / (p + centroid.row(0).sum()  - a))
         .collect();
+    
+    let has_nonzero = sims_med.iter().any(|&x| x != 0.0);
+    println!("sims_med has nonzero? {}", has_nonzero);
+
+    println!("sims_med: {:?}", sims_med);
 
 
     // # Get the least similar molecule to the centroid
@@ -146,7 +215,17 @@ fn max_separation(centroids: &DMatrix<f32>, max_branches: usize) -> (usize, usiz
     // a_mol1 = np.dot(X, X[mol1])
 
     let a_mol1 : Vec<f32> = (centroids * centroids.row(mol1).transpose()).as_slice().to_vec();
+    
+    let has_nonzero = a_mol1.iter().any(|&x| x != 0.0);
+    println!("a_mol1 has nonzero? {}", has_nonzero);
 
+    println!("a_mol1: {:?}", a_mol1);
+
+    let has_nonzero = pop_counts.iter().any(|&x| x != 0.0);
+    println!("pop_counts has nonzero? {}", has_nonzero);
+
+    println!("pop_counts: {:?}", pop_counts);
+    
     // sims_mol1 = a_mol1 / (pop_counts + pop_counts[mol1] - a_mol1)
 
     let sims_mol1: Vec<f32> = a_mol1.iter()
@@ -156,12 +235,18 @@ fn max_separation(centroids: &DMatrix<f32>, max_branches: usize) -> (usize, usiz
 
     // # Get the least similar molecule to mol1
     // mol2 = np.argmin(sims_mol1)
+    let has_nonzero = sims_mol1.iter().any(|&x| x != 0.0);
+    println!("sims_mol1 has nonzero? {}", has_nonzero);
+
+    println!("sims_mol1: {:?}", sims_mol1);
 
     let mol2 = sims_mol1
         .iter()
         .enumerate()
         .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
         .unwrap().0;
+
+
 
     // # Get the similarity of each molecule to mol2
     // a_mol2 = np.dot(X, X[mol2])
@@ -188,20 +273,52 @@ fn calc_centroid( ls: &Vec<f32>, nj: u32, max_branches: usize, n_features: usize
 
     let threshold = nj as f32 * 0.5;
     let mut centroid = DMatrix::<f32>::zeros(max_branches + 1, n_features);
+    
+    println!("nj, threshold: {}, {}", nj, threshold);
+
+
 
     for (j, &x) in ls.iter().enumerate() {
+        if nj == 51 && threshold == 25.5 && x > 0.0 {
+            println!("in calc_centroid: x > threshold? {}, {}",x, threshold);
+
+        }
+        if x > threshold {
+            println!("in calc_centroid, GREATER. x > threshold {}, {}",x, threshold);
+        }
+        
         centroid[(0, j)] = if x >= threshold { 1.0 } else { 0.0 };
+
+        // centroid[(0, j)] = if x > 0.0 { 1.0 } else { 0.0 };
+
     }
+
+
 
     centroid
 }
 
-fn split_node(node_child: &Option<Rc<RefCell<BFNode>>>, threshold: f32, max_branches: usize, singly: bool )-> (BFSubcluster, BFSubcluster){
+fn split_node(
+    node_child: &Option<Rc<RefCell<BFNode>>>,
+    threshold: f32,
+    max_branches: usize,
+    singly: bool
+)-> (BFSubcluster, BFSubcluster){
+
 
     let mut node = node_child.as_ref().unwrap().borrow_mut();
 
-    let mut new_subcluster1 = BFSubcluster::new(None, Vec::<u32>::new(), max_branches, node.n_features);
-    let mut new_subcluster2 = BFSubcluster::new(None, Vec::<u32>::new(), max_branches, node.n_features);
+    let mut new_subcluster1 = BFSubcluster::new(
+        None, 
+        Vec::<String>::new(), 
+        max_branches, 
+        node.n_features);
+    let mut new_subcluster2 = BFSubcluster::new(
+        None, 
+        Vec::<String>::new(), 
+        max_branches, 
+        node.n_features
+    );
 
     // Assuming `node.n_features` is a field in your `Node` struct
     let n_features = node.n_features; 
@@ -249,6 +366,17 @@ fn split_node(node_child: &Option<Rc<RefCell<BFNode>>>, threshold: f32, max_bran
         }
 
     }
+
+    let has_nonzero = node.centroids
+        .iter()
+        .any(|mat| mat.iter().any(|&v| v != 0.0));
+    println!("&node.centroids has nonzero? {}", has_nonzero);
+    println!("node.centroids[0] {}", &node.centroids.clone().unwrap().row(0));
+    let has_nonzero2 = &node.centroids.clone().unwrap().row(0)
+        .iter()
+        .any(|&x| x != 0.0);
+
+    println!("&node.centroids.clone().unwrap().row(0) has zero?: {:?}", has_nonzero2);
 
     let (
         farthest_idx1,
@@ -353,7 +481,8 @@ impl BFNode {
         // self.init_centroids.as_mut().unwrap().copy_from(&centroid);
 
         // println!("INIT {:?}", self.init_centroids);
-        // println!("CENTROID {:?}", centroid.row(0));
+        // println!("CENTROID {:?}", centroid);
+
 
         // NOTE. THIS IS DIFFERENT FROM ORIGINAL CODE
         // self.init_centroids.as_mut().unwrap().row_mut(n_samples).copy_from(&centroid.row(0));
@@ -473,6 +602,10 @@ impl BFNode {
 
         let (row_idx, _) = closest_index; 
 
+        println!("closeset_index: {}", row_idx);
+
+        // println!("self.centroids: {:?}", self.centroids);
+
 
         if !self.subclusters.as_mut().unwrap()[row_idx].child.is_none() {
 
@@ -499,7 +632,13 @@ impl BFNode {
                 self.centroids.as_mut().unwrap()
                     .row_mut(row_idx)
                     .copy_from(&self.subclusters.as_ref().unwrap()[row_idx].centroid.clone().unwrap().row(0));
+
+                let row = self.centroids.as_ref().unwrap().row(row_idx);
+                let has_nonzero = row.iter().any(|&x| x != 0.0);
+                println!("1Row {} has nonzero? {}", row_idx, has_nonzero);
+                // println!("1self.centroids[row_idx]: {:?}", self.centroids.as_mut().unwrap().row(row_idx).iter().take(10).collect::<Vec<_>>());
                 return false
+
             } else {
 
                 let (new_subcluster1, new_subcluster2) = split_node(
@@ -519,15 +658,19 @@ impl BFNode {
                 if self.subclusters.as_ref().unwrap().len() > self.max_branches {
                     return true
                 }
+                let row = self.centroids.as_ref().unwrap().row(row_idx);
+                let has_nonzero = row.iter().any(|&x| x != 0.0);
+                println!("2Row {} has nonzero? {}", row_idx, has_nonzero);
                 return false
             }
+
         } else {
 
             let merged = self.subclusters.as_mut().unwrap()[row_idx].merge_subcluster(
                 subcluster.clone(), max_branches, threshold
             );
             
-            // println!("MERGED? {}", merged);
+            println!("MERGED? {}", merged);
 
 
             if merged {
@@ -538,7 +681,9 @@ impl BFNode {
                 // NOTE: this saves the first row of centroids
                 self.centroids.as_mut().unwrap().row_mut(row_idx).copy_from(&row.clone().unwrap().row(0));
                 self.init_centroids.as_mut().unwrap().row_mut(row_idx).copy_from(&row.clone().unwrap().row(0));
-
+                let row = self.centroids.as_ref().unwrap().row(row_idx);
+                let has_nonzero = row.iter().any(|&x| x != 0.0);
+                println!("3Row {} has nonzero? {}", row_idx, has_nonzero);
                 if !singly{
                     // closest_subcluster.parent = ps; 
                     self.subclusters.as_mut().unwrap()[row_idx] = parent;
@@ -553,17 +698,32 @@ impl BFNode {
                     // closest_subcluster.parent = ps; 
                     self.subclusters.as_mut().unwrap()[row_idx] = parent;
                 }
+                let row = self.centroids.as_ref().unwrap().row(row_idx);
+                let has_nonzero = row.iter().any(|&x| x != 0.0);
+                println!("4Row {} has nonzero? {}", row_idx, has_nonzero);
+
+                // println!("4self.centroids[row_idx]: {:?}", self.centroids.as_mut().unwrap().row(row_idx).iter().take(10).collect::<Vec<_>>());
+
                 return false
 
             // # We do not have enough space nor is it closer to an
             // # other subcluster. We need to split.
             } else {
                 self.append_subcluster(subcluster.clone());
+
+                let row = self.centroids.as_ref().unwrap().row(row_idx);
+                let has_nonzero = row.iter().any(|&x| x != 0.0);
+                println!("5Row {} has nonzero? {}", row_idx, has_nonzero);
+
+                // println!("5self.centroids[row_idx]: {:?}", self.centroids.as_mut().unwrap().row(row_idx).iter().take(10).collect::<Vec<_>>());
+
                 return true
 
             }
 
+
         }
+
         // true // Rust compiler states it is an unreachable expression
     }
 }
@@ -572,7 +732,7 @@ impl BFNode {
 struct BFSubcluster {
     nj: u32,
     ls: Option<Vec<f32>>,
-    mols: Option<Vec<u32>>,
+    mols: Option<Vec<String>>,
     // cj: Option<Vec<f32>>,
     child: Option<Rc<RefCell<BFNode>>>,
     parent: Option<Rc<RefCell<Parent>>>,
@@ -580,17 +740,14 @@ struct BFSubcluster {
 }
 
 impl BFSubcluster {
-    pub fn new(linear_sum: Option<Vec<f32>>, mol_indices: Vec<u32>, max_branches: usize, n_features: usize) -> Self {
+    pub fn new(linear_sum: Option<Vec<f32>>, mol_titles: Vec<String>, max_branches: usize, n_features: usize) -> Self {
 
-        // add linear sum into centroid__
-        // centroid__ = 
-        // Some(DMatrix::from_row_slice(1, n, &v))
         if linear_sum == None {
 
             BFSubcluster {
                 nj: 0,
                 ls: Some(vec![0.0; n_features]),
-                mols: Some(Vec::<u32>::new()),
+                mols: Some(Vec::<String>::new()),
                 // cj: None,
                 child: None,
                 parent: None,
@@ -603,7 +760,9 @@ impl BFSubcluster {
 
             // Convert linear_sum Vec<f32> into a dynamic RowVector
             let row_vec = RowVector::<f32, Dyn, VecStorage<f32, U1, Dyn>>::from_vec(linear_sum.clone().unwrap());
+            let has_nonzero = row_vec.iter().any(|&x| x != 0.0);
 
+            println!("row_vec in new BFsubcluster, has nonzero? {}", has_nonzero);
             // Set the first row
             centroid_zeros.row_mut(0).copy_from(&row_vec);
 
@@ -611,7 +770,7 @@ impl BFSubcluster {
             BFSubcluster {
                 nj: 1,
                 ls: Some(linear_sum.clone().unwrap()),
-                mols: Some(mol_indices),
+                mols: Some(mol_titles),
                 // cj: Some(linear_sum.clone().unwrap()),
                 child: None,
                 parent: None,
@@ -651,7 +810,29 @@ impl BFSubcluster {
         // But because the original Code language can mutate any variable
         // with any other data type. We need max_branches and n_featires 
         // to retern a generated Dmatrix for self.centroid. 
-        self.centroid = Some(calc_centroid(&self.ls.as_ref().unwrap(), self.nj, max_branches, n_features));
+
+        let new_cent = calc_centroid(
+            &self.ls.as_ref().unwrap(), 
+            self.nj, 
+            max_branches, 
+            n_features
+        );
+
+        // if centroids is all zeros, fallback to presence-based centroid.
+        // THIS IS NOT THE SAME AS ORIGINAL CODE
+        // NOR IS IT THE SAME LOGIC AS max_seperation FUNCTION
+        let centroid_is_zero = new_cent.row(0).iter().all(|&x| x == 0.0);
+        if centroid_is_zero {
+            // no previous centroid: fallback to presence-based centroid
+            let mut fb = new_cent.clone();
+            for (j, &v) in self.ls.as_ref().unwrap().iter().enumerate() {
+                fb[(0, j)] = if v > 0.0 { 1.0 } else { 0.0 };
+            }
+            self.centroid = Some(fb);
+
+        } else {
+            self.centroid = Some(new_cent);
+        }
     }
 
     fn merge_subcluster (
@@ -667,10 +848,13 @@ impl BFSubcluster {
             .collect();
 
         let new_n = self.nj + nominee_cluster.nj;
+
+        // BUG: Here we know that calc_centroids returns zero.
         let new_centroid = calc_centroid(&new_ls, new_n, max_branches, new_ls.len() );
-        
+        let has_nonzero1 = new_centroid.row(0).iter().any(|&x| x != 0.0);
+        println!("&centroid in merge_subcluster has nonzero? {}", has_nonzero1);
         // TODO: this needs to be changed where set_merge can called anywhere.
-        let merge_accept = set_merge(MergeCriterion::Radius, 0.05);
+        let merge_accept = set_merge(MergeCriterion::Diameter, 0.05);
 
         // Collect the row into a Vec<f32> instead of trying to call as_slice()
         let row_as_vec: Vec<f32> = new_centroid.row(0).iter().cloned().collect();
@@ -690,15 +874,13 @@ impl BFSubcluster {
             self.centroid = Some(new_centroid); 
             // self.mol_indices = self.mol_indices + nominee_cluster.mol_indices;
             if let (Some(a), Some(b)) = (self.mols.as_mut(), nominee_cluster.mols.as_ref()) {
-
+                println!("Merging mols {:?} with {:?}", a, b);
                 a.extend_from_slice(b);
             }
             return true
         }
         false
     }
-
-
 }
 
 #[derive(Debug)]
@@ -730,7 +912,12 @@ impl VoxBirch {
 
 
     // Fit function. only takes in one grid. 
-    pub fn fit(&mut self, grids : &DMatrix<f32>, singly: bool) -> &mut VoxBirch {
+    pub fn fit(
+        &mut self, 
+        grids : &DMatrix<f32>, 
+        titles: Vec<String>, 
+        singly: bool) -> &mut VoxBirch 
+        {
 
 
 
@@ -784,12 +971,16 @@ impl VoxBirch {
 
         for iter in 0..grids.nrows() {
 
-            // println!("ITERATION: {}", iter);
+            println!("grid: {}", iter);
              
             let grid: Option<Vec<f32>> = Some(grids.row(iter).iter().copied().collect());
             let set_bits: f32 = grids.row(iter).sum();
-            let mol_indices: Vec<u32> = vec![self.index_tracker];
-            let subcluster = BFSubcluster::new(grid.clone(), mol_indices, self.max_branches, grid.unwrap().len());
+            let mol_indices: Vec<String> = vec![titles.get(iter).unwrap().to_string()];
+            let subcluster = BFSubcluster::new(
+                grid.clone(),
+                mol_indices, 
+                self.max_branches, 
+                grid.unwrap().len());
 
             let split = self.root.as_ref().unwrap().borrow_mut().insert_bf_subcluster(
                 subcluster.clone(),
@@ -802,6 +993,7 @@ impl VoxBirch {
             );
 
             if split {
+
                 let (new_subcluster1, new_subcluster2) = split_node(
                     &self.root,
                     self.threshold,
@@ -860,8 +1052,6 @@ impl VoxBirch {
             }
             self.index_tracker += 1;
         }
-        // TODO: This needs to be completed. 
-        // ignored because I wanted to complete the algorithm quickly
 
         // Get leaves by calling get_leaves()
         let leaves = self.get_leaves();
@@ -878,8 +1068,6 @@ impl VoxBirch {
                 }
             }
         }
-
-        // let centroids = DMatrix::from_rows(&rows);
 
         // Assuming the centroids are a matrix and need to be reshaped
         self.subcluster_centers = Some(rows.clone());
@@ -900,6 +1088,32 @@ impl VoxBirch {
         }
         
         leaves
+    }
+    pub fn get_cluster_mol_ids(& self) ->  Vec<Vec<String>> {
+
+        if self.first_call {
+            panic!("The model has not been fitted yet.");
+        }        
+
+        let mut clusters_mol_id = Vec::<Vec::<String>>::new();
+        
+        for leaf in self.get_leaves() {
+            let leaf_ref = leaf.borrow();
+
+            if let Some(subclusters) = leaf_ref.subclusters.as_ref() {
+                for subcluster in subclusters.iter() {
+                    if let Some(mols) = subcluster.mols.as_ref() {
+                        clusters_mol_id.push(mols.clone());
+                    }
+                }
+            }
+        }
+
+        // Sort the clusters by the number of samples in the cluster
+        // This is descending order 
+        clusters_mol_id.sort_by(|a, b| b.len().cmp(&a.len()));
+
+        return clusters_mol_id
     }
 }
 
