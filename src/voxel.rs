@@ -2,6 +2,7 @@ use crate::file_io::VoxMol;
 
 #[derive(Clone)]
 pub struct VoxelGrid {
+    pub title : String,
     pub dims: [usize; 3],
     pub data: Vec<u8>,    
 }
@@ -10,6 +11,7 @@ impl VoxelGrid {
     pub fn new(dims: [usize; 3]) -> Self {
         let size = dims[0] * dims[1] * dims[2];
         Self {
+            title: String::new(),
             dims,
             data: vec![0; size],
         }
@@ -39,10 +41,11 @@ pub fn voxelize(
 
     let mut grids = Vec::<VoxelGrid>::new();
 
-
     for mol in l_mols.iter() {
 
         let mut grid = VoxelGrid::new(dims);
+
+        grid.title = mol.title.clone();
 
         for atom_idx in 0..mol.num_atoms() {
             let x = mol.x[atom_idx];

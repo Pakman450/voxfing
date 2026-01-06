@@ -2,6 +2,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::{self, BufRead, BufWriter, Write, Result};
 pub struct VoxMol {
+    pub title: String,
     pub x: Vec<f32>,
     pub y: Vec<f32>,
     pub z: Vec<f32>,
@@ -10,6 +11,7 @@ pub struct VoxMol {
 impl VoxMol {
     pub fn new() -> Self {
         Self {
+            title: String::new(),
             x: Vec::new(),
             y: Vec::new(),
             z: Vec::new(),
@@ -25,6 +27,7 @@ impl VoxMol {
     }
 }
 
+//
 pub fn read_mol2_file(path: &Path) -> Result<Vec<VoxMol>> {
     println!("Reading MOL2 file from: {:?}", path);
 
@@ -37,6 +40,7 @@ pub fn read_mol2_file(path: &Path) -> Result<Vec<VoxMol>> {
 
     // Flags to track sections in MOL2 file
     let mut in_atom_section: bool = false;
+
 
     // Read file line by line
     for line in reader.lines() {
@@ -52,6 +56,16 @@ pub fn read_mol2_file(path: &Path) -> Result<Vec<VoxMol>> {
             in_atom_section = false;
             continue;
         }
+
+        if line.contains("Name:") {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                mol.title = parts[2].to_string();
+            }
+            continue;
+        }
+
+
 
         if in_atom_section {
             // Parse atom line to extract x, y, z coordinates
@@ -84,7 +98,7 @@ pub fn read_mol2_file(path: &Path) -> Result<Vec<VoxMol>> {
     
 }
 
-pub fn write_cluster_mol_ids(path: &Path, cluster_mol_ids: &Vec<Vec<u32>>) -> Result<()>  {
+pub fn write_cluster_mol_ids(path: &Path, cluster_mol_ids: &Vec<Vec<String>>) -> Result<()>  {
     
     println!("Writing cluster mol ids to: {:?}", path);
 

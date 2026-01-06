@@ -29,11 +29,11 @@ struct Args {
     origin: Vec<f32>,
 
     // threshold
-    #[arg(short, long, default_value_t = 0.75)]
+    #[arg(short, long, default_value_t = 0.65)]
     threshold: f32,
 
     // max_branches
-    #[arg(short, long, default_value_t = 75)]
+    #[arg(short, long, default_value_t = 50)]
     max_branches: usize,
 }
 
@@ -162,6 +162,8 @@ fn main() {
         num_cols
     );
 
+    let mut titles: Vec<String> = Vec::new();
+
     // Fill the matrix with the data from each VoxelGrid
     for (i, grids) in grids.iter().enumerate() {
         for (j, &value) in grids.data.iter().enumerate() {
@@ -169,10 +171,15 @@ fn main() {
         }
     }
 
+    // Collect titles
+    for grids in grids.iter() {
+        titles.push(grids.title.clone());
+    }
+
     println!("Fitting Voxel Grids into VoxBirch...");
 
     // start clustering
-    vb.fit(&input_matrix, true);
+    vb.fit(&input_matrix, titles, true);
 
 
     // Get results after clustering. 
