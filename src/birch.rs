@@ -36,25 +36,41 @@ fn element_wise_add(vec1: &Vec<f32>, vec2: &Vec<f32>) -> Vec<f32> {
     result
 }
 
-fn set_merge(merge_criterion: MergeCriterion, tolerance: f32) -> Box<dyn Fn(f32, &Vec<f32>, &Vec<f32>,&Vec<f32>, usize, &Vec<f32>, &Vec<f32>, usize, usize) -> bool> {
+fn set_merge(merge_criterion: MergeCriterion, tolerance: f32) -> Box<dyn Fn(
+    f32, 
+    &Vec<f32>, 
+    &Vec<f32>,
+    &Vec<f32>, 
+    usize, 
+    &Vec<f32>, 
+    &Vec<f32>,
+    &Vec<f32>, 
+    usize, 
+    usize
+) -> bool> {
     match merge_criterion {
         MergeCriterion::Radius => {
-            Box::new(move |threshold, new_ls, new_ss, new_centroid, new_n, old_ls, nom_ls, old_n, nom_n| {
-                let jt_sim = jt_isim_binary(&[new_ls.clone(), new_centroid.clone()].concat(), new_n + 1)
+            Box::new(move |threshold, new_ls, new_ss, new_centroid, new_n, old_ls, old_ss, nom_ls, old_n, nom_n| {
+                let jt_sim = itani_real_no_list(&[new_ls.clone(), new_centroid.clone()].concat(), &new_ss, new_n + 1)
                     * (new_n + 1) as f32
-                    - jt_isim_binary(&new_ls, new_n) * (new_n - 1) as f32;
+                    - itani_real_no_list(&new_ls, &new_ss, new_n) * (new_n - 1) as f32;
                 jt_sim >= threshold * 2.0
             })
         }
         MergeCriterion::Diameter => {
-            Box::new(move |threshold, new_ls, new_ss, new_centroid, new_n, old_ls, nom_ls, old_n, nom_n| {
+            Box::new(move |threshold, new_ls, new_ss, new_centroid, new_n, old_ls, old_ss, nom_ls, old_n, nom_n| {
                 let jt_radius = itani_real_no_list(&new_ls, &new_ss, new_n);
+
+                if jt_radius >= threshold {
+                    print!("Merging due to diameter criterion: jt_radius = {}", jt_radius);
+                }
+
                 jt_radius >= threshold
             })
         }
         MergeCriterion::ToleranceTough => {
-            Box::new(move |threshold, new_ls,new_ss, new_centroid, new_n, old_ls, nom_ls, old_n, nom_n| {
-                let jt_radius = jt_isim_binary(&new_ls, new_n);
+            Box::new(move |threshold, new_ls,new_ss, new_centroid, new_n, old_ls, old_ss, nom_ls, old_n, nom_n| {
+                let jt_radius = itani_real_no_list(&new_ls, &new_ss, new_n);
                 if jt_radius < threshold {
                     return false;
                 } else {
@@ -78,7 +94,7 @@ fn set_merge(merge_criterion: MergeCriterion, tolerance: f32) -> Box<dyn Fn(f32,
             })
         }
         MergeCriterion::Tolerance => {
-            Box::new(move |threshold, new_ls, new_ss, new_centroid, new_n, old_ls, nom_ls, old_n, nom_n| {
+            Box::new(move |threshold, new_ls, new_ss, new_centroid, new_n, old_ls, old_ss, nom_ls, old_n, nom_n| {
                 let jt_radius = jt_isim_binary(&new_ls, new_n);
                 if jt_radius < threshold {
                     return false;
@@ -787,11 +803,12 @@ impl BFSubcluster {
             &row_as_vec, 
             new_n as usize, 
             &self.ls.as_ref().unwrap(), 
+            &self.ss.as_ref().unwrap(), 
             &nominee_cluster.ls.unwrap(), 
             self.nj as usize, 
             nominee_cluster.nj as usize
         ) {
-            println!("  Merge accepted between clusters with sizes {} and {}", self.nj, nominee_cluster.nj);
+            println!(" Accepted between clusters with sizes {} and {}", self.nj, nominee_cluster.nj);
             self.nj = new_n;
             self.ls = Some(new_ls);
             self.ss = Some(new_ss);

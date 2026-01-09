@@ -79,5 +79,76 @@ pub fn voxelize(
 }
 
 
+pub fn get_recommended_info(l_mols: &Vec<VoxMol>, resolution: f32, x0: f32, y0: f32, z0: f32) -> (
+    f32, f32, f32, usize, usize, usize, usize, usize, usize
+) {
+    let mut l_vals = Vec::<f32>::new();
+
+    for mol in l_mols {
+        l_vals.extend(mol.x.clone())
+    }
+
+    let min_x = l_vals.iter().cloned().filter(|&x| !x.is_nan()).min_by(|a, b| a.partial_cmp(b).unwrap()).expect("No valid minimum found (possibly due to NaN values).");
+
+    l_vals.clear();
+
+    for mol in l_mols {
+        l_vals.extend(mol.y.clone())
+    }
+
+    let min_y = l_vals.iter().cloned().filter(|&x| !x.is_nan()).min_by(|a, b| a.partial_cmp(b).unwrap()).expect("No valid minimum found (possibly due to NaN values).");
+
+    l_vals.clear();
+    for mol in l_mols {
+        l_vals.extend(mol.z.clone())
+    }
+    let min_z = l_vals.iter().cloned().filter(|&x| !x.is_nan()).min_by(|a, b| a.partial_cmp(b).unwrap()).expect("No valid minimum found (possibly due to NaN values).");
+        // Compute maximum coordinates across all molecules so we can compute
+    // the minimal dimensions required to cover them from the recommended origin
+    let mut xs: Vec<f32> = Vec::new();
+    let mut ys: Vec<f32> = Vec::new();
+    let mut zs: Vec<f32> = Vec::new();
+
+    for mol in l_mols {
+        xs.extend(mol.x.iter().cloned());
+        ys.extend(mol.y.iter().cloned());
+        zs.extend(mol.z.iter().cloned());
+    }
+
+    let max_x = xs.iter().cloned().filter(|v| !v.is_nan()).max_by(|a, b| 
+        a.partial_cmp(b).unwrap()).expect("No valid maximum found (possibly due to NaN values)."
+    );
+    let max_y = ys.iter().cloned().filter(|v| !v.is_nan()).max_by(|a, b| 
+        a.partial_cmp(b).unwrap()).expect("No valid maximum found (possibly due to NaN values)."
+    );
+    let max_z = zs.iter().cloned().filter(|v| !v.is_nan()).max_by(|a, b| 
+        a.partial_cmp(b).unwrap()).expect("No valid maximum found (possibly due to NaN values)."
+    );
+
+    // span and required voxels (inclusive of boundary). Use floor(span / resolution) + 1
+    let span_x = (max_x - min_x).max(0.0);
+    let span_y = (max_y - min_y).max(0.0);
+    let span_z = (max_z - min_z).max(0.0);
+
+    let need_x = (span_x / resolution).floor() as usize + 1;
+    let need_y = (span_y / resolution).floor() as usize + 1;
+    let need_z = (span_z / resolution).floor() as usize + 1;
+
+    // Also compute required dims if using the user-provided origin (x0,y0,z0)
+    let span_x_user = (max_x - x0).max(0.0);
+    let span_y_user = (max_y - y0).max(0.0);
+    let span_z_user = (max_z - z0).max(0.0);
+
+    let need_x_user = (span_x_user / resolution).floor() as usize + 1;
+    let need_y_user = (span_y_user / resolution).floor() as usize + 1;
+    let need_z_user = (span_z_user / resolution).floor() as usize + 1;
+
+    (
+        min_x, min_y, min_z, // minimum coordinates
+        need_x, need_y, need_z, // required dims from absolute origin
+        need_x_user, need_y_user, need_z_user // required dims from user-provided origin
+    )
+}
+
 
 

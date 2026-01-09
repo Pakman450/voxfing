@@ -2,14 +2,16 @@ use voxelizer::voxelize;
 use voxelizer::read_mol2_file;
 use voxelizer::write_cluster_mol_ids;
 use voxelizer::birch::VoxBirch;
+use voxelizer::get_recommended_info;
 
 use std::path::{Path};
 use nalgebra::DMatrix;
 use clap::Parser;
 use std::time::{Instant};
 use std::env;
-use env_logger::{Builder, fmt::Color};
+use env_logger::{Builder};
 use std::io::Write;
+
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -47,36 +49,14 @@ struct Args {
 
 fn main() {
 
-
-
     // Get the current time
     let start_time = Instant::now();
 
-
-
-    let ascii_art = r#"
-                                     ,---,.                            ,---,     
-       ,---.                       ,'  .'  \  ,--,                   ,--.' |     
-      /__./|   ,---.             ,---.' .' |,--.'|    __  ,-.        |  |  :     
- ,---.;  ; |  '   ,'\ ,--,  ,--, |   |  |: ||  |,   ,' ,'/ /|        :  :  :     
-/___/ \  | | /   /   ||'. \/ .`| :   :  :  /`--'_   '  | |' | ,---.  :  |  |,--. 
-\   ;  \ ' |.   ; ,. :'  \/  / ; :   |    ; ,' ,'|  |  |   ,'/     \ |  :  '   | 
- \   \  \: |'   | |: : \  \.' /  |   :     \'  | |  '  :  / /    / ' |  |   /' : 
-  ;   \  ' .'   | .; :  \  ;  ;  |   |   . ||  | :  |  | ' .    ' /  '  :  | | | 
-   \   \   '|   :    | / \  \  \ '   :  '; |'  : |__;  : | '   ; :__ |  |  ' | : 
-    \   `  ; \   \  /./__;   ;  \|   |  | ; |  | '.'|  , ; '   | '.'||  :  :_:,' 
-     :   \ |  `----' |   :/\  \ ;|   :   /  ;  :    ;---'  |   :    :|  | ,'     
-      '---"          `---'  `--` |   | ,'   |  ,   /        \   \  / `--''       
-                                 `----'      ---`-'          `----'              
-    "#;
-
     // Print the ASCII art
-    println!("{}", ascii_art);
-    println!("Code Written by: Steven Pak\n");
-
-    let args = Args::parse();
-
+    voxelizer::ascii::print_ascii_art();
+        
     // Argument unpacking
+    let args = Args::parse();
     let file_path= args.path;
     let dimx = args.dims[0];
     let dimy = args.dims[1];
@@ -99,6 +79,7 @@ fn main() {
         env::set_var("RUST_LOG", "trace");
     } 
 
+    // Initialize the logger with custom format
     Builder::from_default_env()
         .format(|buf, record| {
             // IMPORTANT: keep the style alive
@@ -121,76 +102,60 @@ fn main() {
 
     // Read MOL2 file
     let path = Path::new(&file_path);
-
-    // Get molecule list
     let l_mols = read_mol2_file(path).expect("Failed to read MOL2 file");
 
+    // Print some input info
+    println!("################################################");
+    println!("MOL2 file path: {}", file_path);
+    println!("Number of molecules read: {}", l_mols.len());
+    println!("Voxel Grid Dimensions: {} x {} x {}", dimx, dimy, dimz);
+    println!("Voxel Grid Resolution: {}", resolution);
+    println!("Voxel Grid Origin: ({}, {}, {})", x0, y0, z0);
+    println!("Thresold: {}", threshold);
+    println!("Max branches: {}", max_branches);
+    println!("################################################");
+
+    println!("\nGrabbing recommended voxelization parameters...");
     // Give user the recommended origin values for placing voxels.
-    let mut l_vals = Vec::<f32>::new();
+    let (
+        min_x, 
+        min_y, 
+        min_z, 
+        need_x, 
+        need_y, 
+        need_z,
+        need_x_user,
+        need_y_user,
+        need_z_user
+    ) = get_recommended_info(&l_mols, resolution, x0, y0, z0);
+    println!("The recommended origin: {},{},{}", min_x.floor(), min_y.floor(), min_z.floor());
 
-    for mol in &l_mols {
-        l_vals.extend(mol.x.clone())
-    }
+    println!(
+        "Minimal voxel grid dimensions to cover all molecules\n\t(from absolute origin {}): {},{},{}",
+        format!("{:.3},{:.3},{:.3}", min_x, min_y, min_z), need_x, need_y, need_z
+    );
+    println!(
+        "Required dims from provided origin ({:.3},{:.3},{:.3}): {},{},{}", 
+        x0, y0, z0, 
+        need_x_user, need_y_user, need_z_user
+    );
 
-    // Give user origin recommendation 
-    if let Some(min_value) = &l_vals.iter().cloned().filter(|&x| !x.is_nan()).min_by(|a, b| a.partial_cmp(b).unwrap()) {
-        println!("The recommended minimum x value is: {}", min_value);
-    } else {
-        panic!("No valid minimum found (possibly due to NaN values).");
-    }
-
-    l_vals.clear();
-
-    for mol in &l_mols {
-        l_vals.extend(mol.y.clone())
-    }
-
-    // Give user origin recommendation 
-    if let Some(min_value) = &l_vals.iter().cloned().filter(|&x| !x.is_nan()).min_by(|a, b| a.partial_cmp(b).unwrap()) {
-        println!("The recommended minimum y value is: {}", min_value);
-    } else {
-        panic!("No valid minimum found (possibly due to NaN values).");
-    }
-
-    l_vals.clear();
-
-
-    for mol in &l_mols {
-        l_vals.extend(mol.z.clone())
-    }
-
-    // Give user origin recommendation 
-    if let Some(min_value) = &l_vals.iter().cloned().filter(|&x| !x.is_nan()).min_by(|a, b| a.partial_cmp(b).unwrap()) {
-        println!("The recommended minimum z value is: {}", min_value);
-    } else {
-        panic!("No valid minimum found (possibly due to NaN values).");
-    }
-
+    println!("\nVoxelizing...");
     // Voxelization of molecules's xyz's
     let grids = voxelize(l_mols, [dimx, dimy, dimz], resolution, x0, y0, z0); 
 
-    // Print some voxel grid info
-    println!("Voxel Grid Dimensions: {:?}", grids[0].dims);
-    println!("Voxel Grid Resolution: {}", resolution);
-    println!("Voxel Grid Number of grids of the first grid: {}", grids[0].data.len());
-
-    let mut vb = VoxBirch::new(
-        threshold, // threshold
-        max_branches // branches
-    );
-
-    println!("Thresold: {}", threshold);
-    println!("Max brances: {}", max_branches);
-
     // Get the number of rows (which is the number of VoxelGrids)
     let num_rows = grids.len();
-    
-    println!("Number of molecules: {}", num_rows);
-
     // Get the number of columns (which is the length of the data in each VoxelGrid)
     let num_cols = grids[0].data.len();  // Assuming all VoxelGrids have the same length of data
 
-    println!("Number of bits: {}", num_cols);
+    println!("Shape of data: ({} molecules, {} bits)", num_rows, num_cols);
+
+    // Initialize VoxBirch
+    let mut vb = VoxBirch::new(
+        threshold, 
+        max_branches
+    );
 
     // Create the DMatrix with the correct size
     let mut input_matrix: DMatrix<f32> = DMatrix::zeros(
