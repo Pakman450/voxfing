@@ -1,3 +1,5 @@
+use core::num;
+
 use crate::voxel::VoxelGrid;
 use log::{error, warn, info, debug, trace};
 
@@ -45,7 +47,6 @@ pub fn itani_bin(l_grids: &Vec<VoxelGrid>) -> f32 {
 // number of bits 
 
 pub fn itani_real(l_grids: &Vec<VoxelGrid>) -> f32 {
-
 
     // num of bits
     let m = l_grids[0].data.len();
@@ -100,12 +101,13 @@ pub fn itani_real(l_grids: &Vec<VoxelGrid>) -> f32 {
 // Here it will always return zero. The way binary and real calulcations 
 // are different. Double check
 pub fn itani_real_no_list(
-    c_total: &Vec<f32>,
+    ls_total: &Vec<f32>,
+    ss_total: &Vec<f32>,
     n: usize // num_of_grids
 ) -> f32 {
 
     // num of bits
-    let m = c_total.len();
+    let m = ls_total.len();
 
     // vector to hold column wise sums
     let mut xq: Vec<f32> = vec![0.0; m];
@@ -113,56 +115,70 @@ pub fn itani_real_no_list(
     // vector to hold column wise sums
     let mut xq_sq: Vec<f32> = vec![0.0; m]; 
 
-
+    // compute columwise sums and squares
     for i in 0..m {
-        xq[i] = c_total[i];
-        xq_sq[i] = (c_total[i] as f32) * (c_total[i] as f32);
+        xq[i] = ls_total[i];
+        xq_sq[i] = ss_total[i];
     }
 
     // print out trye if xq and xq_sq have nonzero values
-    for i in 0..m {
-        if xq[i] != 0.0 || xq_sq[i] !=
-            0.0 {
-                debug!("xq[{}] = {}, xq_sq[{}] = {}", i, xq[i], i, xq_sq[i]);
-            }
-    }
+    // for i in 0..m {
+    //     if xq[i] != 0.0 || xq_sq[i] !=
+    //         0.0 {
+    //             debug!("xq[{}] = {}, xq_sq[{}] = {}", i, xq[i], i, xq_sq[i]);
+    //         }
+    // }
 
     // compute itani index
-    let mut numer = 0.0;
-    let mut denom1 = 0.0;
-    let mut denom2 = 0.0;
-    for i in 0..m {
-        numer += (xq[i] * xq[i]) - xq_sq[i];
-    }   
-
-    numer = numer / 2.0;
+    let mut numer = vec![0.0; m];
 
     for i in 0..m {
-        denom1 += xq_sq[i];
+        numer[i] = ((xq[i] * xq[i]) - xq_sq[i]) / 2.0;
     }   
 
-    denom1 = (n-1) as f32 * denom1;
+    let numer_sum: f32 = numer.iter().sum();
+    let ss_sum: f32 = ss_total.iter().sum();
+    let inners=(n as f32 - 1.0) * ss_sum;
 
-    for i in 0..m {
-        denom2 += (xq[i] * xq[i]) - xq_sq[i];
-    }   
+    let result_score = numer_sum / (inners - numer_sum);
 
-    denom2 = denom2 / 2.0;
-
-    let itani = numer / (denom1 - denom2);
-
-    debug!("jt_isim = {} : n_bits = {}, n_objects = {}, numer = {}, denom1 = {}, denom2 = {}", 
-        itani,
+    debug!("jt_isim_real = {} : n_bits = {}, n_objects = {}, numer_sum = {}", 
+        result_score,
         m,
         n,
-        numer,
-        denom1,
-        denom2
+        numer_sum
         );
 
-    itani
+    result_score
+
 }
 
+// Define the jt_isim function
+pub fn jt_isim_binary(c_total: &Vec<f32>, n_objects: usize) -> f32 {
+    // Sum of the elements in c_total (column-wise sum)
+    let sum_kq: f32 = c_total.iter().copied().sum();
+
+    // Sum of squares (dot product of c_total with itself)
+    let sum_kqsq: f32 = c_total.iter().copied().map(|x| x * x).sum();
+
+    // Compute the variable a
+    let a = (sum_kqsq - sum_kq) / 2.0;
+
+    let jt_isim_val = a / (a + (n_objects as f32) * sum_kq - sum_kqsq);
+
+    println!("ji_isim score: {}", jt_isim_val);
+
+    debug!("jt_isim = {} : a = {}, sum_kq = {}, sum_kqsq = {}, n_objects = {}", 
+        jt_isim_val,
+        a, 
+        sum_kq,
+        sum_kqsq, 
+        n_objects
+        );
+
+    // Return the iSIM Jaccard-Tanimoto value
+    jt_isim_val
+}
 
 pub fn diameter_real(itani_real: f32) -> f32{
     1.0-itani_real

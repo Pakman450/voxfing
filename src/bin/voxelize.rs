@@ -1,15 +1,15 @@
 use voxelizer::voxelize;
 use voxelizer::read_mol2_file;
 use voxelizer::write_cluster_mol_ids;
-
 use voxelizer::birch::VoxBirch;
 
 use std::path::{Path};
 use nalgebra::DMatrix;
 use clap::Parser;
 use std::time::{Instant};
-use log::{error, warn, info, debug, trace};
 use std::env;
+use env_logger::{Builder, fmt::Color};
+use std::io::Write;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -19,11 +19,11 @@ struct Args {
     path: String,
 
     /// Dimensions of the voxel grid (x, y, z), comma separated
-    #[arg(short, long, value_delimiter = ',', default_value = "100,100,100")]
+    #[arg(short, long, value_delimiter = ',', default_value = "20,20,20")]
     dims: Vec<usize>,
 
     /// resolution of the voxel grid
-    #[arg(short, long, default_value_t = 0.5)]
+    #[arg(short, long, default_value_t = 2.0)]
     resolution: f32,
 
     /// target origin x0 y0 z0, comma separated
@@ -38,9 +38,9 @@ struct Args {
     #[arg(short, long, default_value_t = 50)]
     max_branches: usize,
 
-    // verbosity level
-    #[arg(short, long, default_value_t = false)]
-    verbosity: bool,
+    /// Verbosity level
+    #[arg(short, long, action = clap::ArgAction::Count, default_value_t = 0)]
+    verbosity: u8,
 }
 
 
@@ -77,7 +77,7 @@ fn main() {
     let args = Args::parse();
 
     // Argument unpacking
-    let file_path: String = args.path;
+    let file_path= args.path;
     let dimx = args.dims[0];
     let dimy = args.dims[1];
     let dimz = args.dims[2];
@@ -87,11 +87,10 @@ fn main() {
     let resolution = args.resolution;
     let threshold = args.threshold;
     let max_branches = args.max_branches;
-    let verbose = args.verbosity;
-    // let method = args.method;
+    let verbosity = args.verbosity;
 
     // Initialize the logger with appropriate level
-    if verbose {
+    if verbosity == 2 {
         // Set RUST_LOG to debug level if verbose
         env::set_var("RUST_LOG", "debug");
         env::set_var("RUST_LOG", "warn");
@@ -99,7 +98,26 @@ fn main() {
         env::set_var("RUST_LOG", "error");
         env::set_var("RUST_LOG", "trace");
     } 
-    env_logger::init();
+
+    Builder::from_default_env()
+        .format(|buf, record| {
+            // IMPORTANT: keep the style alive
+            let level_style = buf.default_level_style(record.level());
+            let level = level_style.value(record.level());
+
+            let file = record.file().unwrap_or("unknown");
+            let line = record.line().unwrap_or(0);
+
+            writeln!(
+                buf,
+                "[{} {}:{} {}] {}",
+                level,
+                file,
+                line,
+                record.target(),
+                record.args()
+            )
+        }).init();
 
     // Read MOL2 file
     let path = Path::new(&file_path);
