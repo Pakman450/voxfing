@@ -351,10 +351,48 @@ fn split_node(
     }
 
     (new_subcluster1, new_subcluster2)
-}   
+} 
 
+// Find the closest subcluster among all subclusters
+// via index so we can insert our new subcluster there
+fn find_closest_subluster(
+    centroids: &DMatrix<f32>, 
+    centroid: &DMatrix<f32>, 
+    set_bits: f32
+) -> usize {
 
+    // perform dot product between two matrices. not inner dot product
+    let a = centroids * &centroid.transpose();
 
+    let row_sums: Vec<f32> = (0..centroids.nrows())
+        .map(|i| centroids.row(i).sum())
+        .collect();
+
+    let mut sim_matrix = a.clone();
+
+    // generate sim matrix
+    for i in 0..sim_matrix.nrows() {
+        let denom = row_sums[i] + set_bits;
+        for j in 0..sim_matrix.ncols() {
+            sim_matrix[(i,j)] = sim_matrix[(i,j)] / (denom - sim_matrix[(i,j)]);
+        }
+    }
+
+    let mut max_val = f32::MIN;
+    let mut closest_index = (0,0);
+
+    // Find index to the maximum value. 
+    for i in 0..sim_matrix.nrows() {
+        for j in 0..sim_matrix.ncols() {
+            if sim_matrix[(i,j)] > max_val {
+                max_val = sim_matrix[(i,j)];
+                closest_index = (i,j);
+            }
+        }
+    }
+
+    closest_index.0
+}
 
 #[derive(Debug, Clone)]
 struct BFNode {
@@ -483,43 +521,11 @@ impl BFNode {
         let threshold = self.threshold;
         let max_branches = self.max_branches;
 
-        // Find the closest subcluster among all subclusters
-        // so we can insert our new subcluster there
-
-        // println!("self.centroids{}", self.centroids.as_ref().unwrap());
-        // println!("subcluster.centroid {}", &subcluster.centroid.as_ref().unwrap().transpose());
-
-        // perform dot product between two matrices. not inner dot product
-        let a = self.centroids.as_ref().unwrap() * &subcluster.centroid.as_ref().unwrap().transpose();
-
-        let row_sums: Vec<f32> = (0..self.centroids.as_ref().unwrap().nrows())
-            .map(|i| self.centroids.as_ref().unwrap().row(i).sum())
-            .collect();
-
-        let mut sim_matrix = a.clone();
-
-        // generate sim matrix
-        for i in 0..sim_matrix.nrows() {
-            let denom = row_sums[i] + set_bits;
-            for j in 0..sim_matrix.ncols() {
-                sim_matrix[(i,j)] = sim_matrix[(i,j)] / (denom - sim_matrix[(i,j)]);
-            }
-        }
-
-        let mut max_val = f32::MIN;
-        let mut closest_index = (0,0);
-
-        // Find index to the maximum value. 
-        for i in 0..sim_matrix.nrows() {
-            for j in 0..sim_matrix.ncols() {
-                if sim_matrix[(i,j)] > max_val {
-                    max_val = sim_matrix[(i,j)];
-                    closest_index = (i,j);
-                }
-            }
-        }
-
-        let (row_idx, _) = closest_index; 
+        let row_idx = find_closest_subluster(
+            self.centroids.as_ref().unwrap(),
+            subcluster.centroid.as_ref().unwrap(),
+            set_bits
+        ); 
 
         // print statistics of length of various fields here
         debug!("
