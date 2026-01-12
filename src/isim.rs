@@ -1,12 +1,10 @@
-use core::num;
-
 use crate::voxel::VoxelGrid;
 use log::{error, warn, info, debug, trace};
 
 // Itani similarity index for binary voxel grids
 // NOTE: assumes all grids have the same dimensions and 
 // number of bits 
-pub fn itani_bin(l_grids: &Vec<VoxelGrid>) -> f32 {
+pub fn itani_bin_grids(l_grids: &Vec<VoxelGrid>) -> f32 {
 
     // num of bits
     let m = l_grids[0].data.len();
@@ -46,7 +44,7 @@ pub fn itani_bin(l_grids: &Vec<VoxelGrid>) -> f32 {
 // NOTE: assumes all grids have the same dimensions and 
 // number of bits 
 
-pub fn itani_real(l_grids: &Vec<VoxelGrid>) -> f32 {
+pub fn itani_real_grids(l_grids: &Vec<VoxelGrid>) -> f32 {
 
     // num of bits
     let m = l_grids[0].data.len();
@@ -95,12 +93,9 @@ pub fn itani_real(l_grids: &Vec<VoxelGrid>) -> f32 {
     itani
 }
 
-
-
-// BUG: This is not correct. Need to implement diameter calculation properly.
-// Here it will always return zero. The way binary and real calulcations 
-// are different. Double check
-pub fn itani_real_no_list(
+// Generates the jt isim score by using 
+// ls and ss vectors
+pub fn jt_isim_real(
     ls_total: &Vec<f32>,
     ss_total: &Vec<f32>,
     n: usize // num_of_grids
@@ -178,55 +173,4 @@ pub fn jt_isim_binary(c_total: &Vec<f32>, n_objects: usize) -> f32 {
 
     // Return the iSIM Jaccard-Tanimoto value
     jt_isim_val
-}
-
-pub fn diameter_real(itani_real: f32) -> f32{
-    1.0-itani_real
-}
-
-// radius function and its helper functions
-// NOTE: not tested
-// fn centroid(
-//     ls: &Vec<f32>, 
-//     nj: u32,
-//     dims: [usize; 3]
-// ) -> VoxelGrid {
-
-//     let mut cj: Vec<f32> = vec![0.0; ls.len()];
-
-//     let mut cj_grid = VoxelGrid::new(dims);
-
-//     for i in 0..ls.len(){
-//         cj[i] = ls[i]/nj as f32 + 0.5;
-//         cj[i] = cj[i].floor();
-//     }
-
-//     cj_grid.data = cj.iter().map(|&x| x as u8).collect();
-
-//     cj_grid
-// }
-
-// NOTE: not tested
-pub fn radius_real(
-    itani_r: f32, 
-    xj: &Vec<VoxelGrid>, 
-    cj: &VoxelGrid, 
-    nj: u32 
-) -> f32 {
-
-    // Make a new vector with capacity for xj + cj
-    let mut xj_cj = Vec::with_capacity(xj.len() + 1);
-
-    // Copy values from xj
-    xj_cj.extend_from_slice(xj);
-
-    // Push the extra element
-    xj_cj.push(cj.clone()); 
-
-    let rj = 1.0 - ( 
-        (((nj + 1) as f32 * itani_real(&xj_cj)) -
-        ((nj-1) as f32 * itani_r)) / 2.0 
-                    );
-
-    rj
 }

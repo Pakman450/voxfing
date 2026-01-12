@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use log::{error, warn, info, debug, trace};
 
-use crate::isim::{itani_real_no_list, jt_isim_binary};
+use crate::isim::{jt_isim_real, jt_isim_binary};
 
 #[derive(Debug)]
 enum Parent {
@@ -51,15 +51,15 @@ fn set_merge(merge_criterion: MergeCriterion, tolerance: f32) -> Box<dyn Fn(
     match merge_criterion {
         MergeCriterion::Radius => {
             Box::new(move |threshold, new_ls, new_ss, new_centroid, new_n, old_ls, old_ss, nom_ls, old_n, nom_n| {
-                let jt_sim = itani_real_no_list(&[new_ls.clone(), new_centroid.clone()].concat(), &new_ss, new_n + 1)
+                let jt_sim = jt_isim_real(&[new_ls.clone(), new_centroid.clone()].concat(), &new_ss, new_n + 1)
                     * (new_n + 1) as f32
-                    - itani_real_no_list(&new_ls, &new_ss, new_n) * (new_n - 1) as f32;
+                    - jt_isim_real(&new_ls, &new_ss, new_n) * (new_n - 1) as f32;
                 jt_sim >= threshold * 2.0
             })
         }
         MergeCriterion::Diameter => {
             Box::new(move |threshold, new_ls, new_ss, new_centroid, new_n, old_ls, old_ss, nom_ls, old_n, nom_n| {
-                let jt_radius = itani_real_no_list(&new_ls, &new_ss, new_n);
+                let jt_radius = jt_isim_real(&new_ls, &new_ss, new_n);
 
                 if jt_radius >= threshold {
                     print!("Merging due to diameter criterion: jt_radius = {}", jt_radius);
@@ -70,7 +70,7 @@ fn set_merge(merge_criterion: MergeCriterion, tolerance: f32) -> Box<dyn Fn(
         }
         MergeCriterion::ToleranceTough => {
             Box::new(move |threshold, new_ls,new_ss, new_centroid, new_n, old_ls, old_ss, nom_ls, old_n, nom_n| {
-                let jt_radius = itani_real_no_list(&new_ls, &new_ss, new_n);
+                let jt_radius = jt_isim_real(&new_ls, &new_ss, new_n);
                 if jt_radius < threshold {
                     return false;
                 } else {
@@ -118,8 +118,6 @@ fn set_merge(merge_criterion: MergeCriterion, tolerance: f32) -> Box<dyn Fn(
 
 
 fn max_separation(centroids: &DMatrix<f32>, max_branches: usize) -> (usize, usize, Vec<f32>, Vec<f32>){
-
-    
 
     // Get the centroid of the set
     let n_samples: u32 = centroids.nrows().try_into().unwrap();
@@ -374,7 +372,8 @@ fn find_closest_subluster(
     for i in 0..sim_matrix.nrows() {
         let denom = row_sums[i] + set_bits;
         for j in 0..sim_matrix.ncols() {
-            sim_matrix[(i,j)] = sim_matrix[(i,j)] / (denom - sim_matrix[(i,j)]);
+            sim_matrix[(i,j)] = 
+                sim_matrix[(i,j)] / (denom - sim_matrix[(i,j)]);
         }
     }
 
@@ -438,7 +437,6 @@ impl BFNode {
             Some(subclusters) => subclusters.len(),
             None => 0,
         };
-
 
         // --- take the centroid BEFORE moving subcluster ---
         let centroid = subcluster.centroid.as_ref().unwrap().clone();
@@ -530,11 +528,16 @@ impl BFNode {
         // print statistics of length of various fields here
         debug!("
             Inserting BFSubcluster: 
+            threshold = {},
+            max_branches = {},
             subclusters.len() = {:?}, 
             closest_index/row_idx = {:?},
             subclusters.child[row_idx].sublcusters.len() = {:?},
             init_centroids shape = {:?}, 
-            centroids shape = {:?}",
+            centroids shape = {:?},
+            subclusters.child[row_idx].child is none? = {:?}",
+            threshold,
+            max_branches,
             self.subclusters.as_ref().map_or(0, |s| s.len()),
             row_idx, 
             self.subclusters.as_mut().unwrap()[row_idx].child.as_ref().map_or(
@@ -542,7 +545,8 @@ impl BFNode {
                 |c| c.borrow().subclusters.as_ref().map_or(0, |sc| sc.len())),
             self.init_centroids.as_ref().map_or((0,0), |c| (c.nrows(), c.ncols())
             ),
-            self.centroids.as_ref().map_or((0,0), |c| (c.nrows(), c.ncols()))
+            self.centroids.as_ref().map_or((0,0), |c| (c.nrows(), c.ncols())),
+            self.subclusters.as_mut().unwrap()[row_idx].child.is_none()
         );
 
         if !self.subclusters.as_mut().unwrap()[row_idx].child.is_none()  {
@@ -567,13 +571,31 @@ impl BFNode {
                 self.subclusters.as_mut().unwrap()[row_idx].update(&subcluster, self.max_branches, self.n_features );
 
                 // NOTE: this saves the first row of centroids
-                self.init_centroids.as_mut().unwrap()
+                self.init_centroids.as_mut()
+                    .unwrap()
                     .row_mut(row_idx)
-                    .copy_from(&self.subclusters.as_ref().unwrap()[row_idx].centroid.clone().unwrap().row(0));
+                    .copy_from(
+                        &self.subclusters
+                            .as_ref()
+                            .unwrap()[row_idx]
+                            .centroid
+                            .clone()
+                            .unwrap()
+                            .row(0)
+                    );
                 
-                self.centroids.as_mut().unwrap()
+                self.centroids.as_mut()
+                    .unwrap()
                     .row_mut(row_idx)
-                    .copy_from(&self.subclusters.as_ref().unwrap()[row_idx].centroid.clone().unwrap().row(0));
+                    .copy_from(
+                        &self.subclusters
+                            .as_ref()
+                            .unwrap()[row_idx]
+                            .centroid
+                                .clone()
+                                .unwrap()
+                                .row(0)
+                    );
 
                 return false
 
@@ -600,10 +622,15 @@ impl BFNode {
                 return false
             }
 
+        // when subclusters.child is None
         } else {
 
             let merged = self.subclusters.as_mut().unwrap()[row_idx].merge_subcluster(
                 subcluster.clone(), max_branches, threshold
+            );
+
+            debug!(
+                "Merged status: {}", merged
             );
             
             if merged {
@@ -612,8 +639,20 @@ impl BFNode {
                 let row = & closest_subcluster[row_idx].centroid;
 
                 // NOTE: this saves the first row of centroids
-                self.centroids.as_mut().unwrap().row_mut(row_idx).copy_from(&row.clone().unwrap().row(0));
-                self.init_centroids.as_mut().unwrap().row_mut(row_idx).copy_from(&row.clone().unwrap().row(0));
+                self.centroids
+                    .as_mut()
+                    .unwrap()
+                    .row_mut(row_idx)
+                    .copy_from(
+                        &row.clone().unwrap().row(0)
+                );
+                self.init_centroids
+                    .as_mut()
+                    .unwrap()
+                    .row_mut(row_idx)
+                    .copy_from(
+                        &row.clone().unwrap().row(0)
+                );
 
                 if !singly{
                     // closest_subcluster.parent = ps; 
@@ -792,7 +831,7 @@ impl BFSubcluster {
 
         let new_n = self.nj + nominee_cluster.nj;
 
-        // BUG: Here we know that calc_centroids returns zero.
+        // BUG: Here we know that calc_centroids can return zero.
         let new_centroid = calc_centroid(&new_ls, new_n, max_branches, new_ls.len() );
 
 
@@ -920,7 +959,9 @@ impl VoxBirch {
                 iter+1, grids.nrows()
             );
 
-            let grid: Option<Vec<f32>> = Some(grids.row(iter).iter().copied().collect());
+            let grid: Option<Vec<f32>> = Some(
+                grids.row(iter).iter().copied().collect()
+            );
             let set_bits: f32 = grids.row(iter).sum();
             let mol_indices: Vec<String> = vec![mol_title];
             let subcluster = BFSubcluster::new(
@@ -929,14 +970,18 @@ impl VoxBirch {
                 self.max_branches, 
                 grid.unwrap().len());
 
-            let split = self.root.as_ref().unwrap().borrow_mut().insert_bf_subcluster(
-                subcluster.clone(),
-                set_bits,
-                // Here, BitBirch feeds in subcluster.parent_
-                // But since Rust is a strongly typed language
-                // we must send in BFSubcluster rather than. BFNode.
-                subcluster.clone(),
-                singly
+            let split = self.root
+                .as_ref()
+                .unwrap()
+                .borrow_mut()
+                .insert_bf_subcluster(
+                    subcluster.clone(),
+                    set_bits,
+                    // Here, BitBirch feeds in subcluster.parent_
+                    // But since Rust is a strongly typed language
+                    // we must send in BFSubcluster rather than. BFNode.
+                    subcluster.clone(),
+                    singly
             );
 
             if split {
@@ -947,8 +992,6 @@ impl VoxBirch {
                     self.max_branches,
                     singly
                 );
-
-
 
                 self.root = None;
 
