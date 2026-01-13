@@ -549,12 +549,54 @@ impl BFNode {
             self.subclusters.as_mut().unwrap()[row_idx].child.is_none()
         );
 
-        if !self.subclusters.as_mut().unwrap()[row_idx].child.is_none()  {
+        let closest_node = self.subclusters.as_mut().unwrap()[row_idx].child.is_none();
 
-            parent = self.subclusters.as_mut().unwrap()[row_idx].clone();
+        if closest_node {
+            let merged = self.subclusters.as_mut().unwrap()[row_idx].merge_subcluster(
+                subcluster.clone(), max_branches, threshold
+            );
 
-            let split_child = 
-                self.subclusters.as_mut().unwrap()[row_idx]
+            debug!(
+                "Merged status: {}", merged
+            );
+
+            if !merged {
+                self.append_subcluster(subcluster.clone());
+                return self.subclusters.as_ref().unwrap().len() > self.max_branches
+            }
+            
+            let closest_subcluster = self.subclusters.as_mut().unwrap(); // Unwrap Option to get a mutable reference
+            let row = & closest_subcluster[row_idx].centroid;
+
+            // NOTE: this saves the first row of centroids
+            self.centroids
+                .as_mut()
+                .unwrap()
+                .row_mut(row_idx)
+                .copy_from(
+                    &row.clone().unwrap().row(0)
+            );
+            self.init_centroids
+                .as_mut()
+                .unwrap()
+                .row_mut(row_idx)
+                .copy_from(
+                    &row.clone().unwrap().row(0)
+            );
+
+            if !singly{
+                // closest_subcluster.parent = ps; 
+                self.subclusters.as_mut().unwrap()[row_idx] = parent;
+            }
+            return false
+
+        }
+
+
+        let split_child = 
+            self.subclusters
+                .as_mut()
+                .unwrap()[row_idx]
                     .child
                     .as_ref()
                     .unwrap()
@@ -565,126 +607,65 @@ impl BFNode {
                         parent.clone(),
                         singly
                 );
-   
-            if !split_child  {
-
-                self.subclusters.as_mut().unwrap()[row_idx].update(&subcluster, self.max_branches, self.n_features );
-
-                // NOTE: this saves the first row of centroids
-                self.init_centroids.as_mut()
-                    .unwrap()
-                    .row_mut(row_idx)
-                    .copy_from(
-                        &self.subclusters
-                            .as_ref()
-                            .unwrap()[row_idx]
-                            .centroid
-                            .clone()
-                            .unwrap()
-                            .row(0)
-                    );
-                
-                self.centroids.as_mut()
-                    .unwrap()
-                    .row_mut(row_idx)
-                    .copy_from(
-                        &self.subclusters
-                            .as_ref()
-                            .unwrap()[row_idx]
-                            .centroid
-                                .clone()
-                                .unwrap()
-                                .row(0)
-                    );
-
-                return false
-
-            } else {
-
-                let (new_subcluster1, new_subcluster2) = split_node(
-                    &self.subclusters.as_mut().unwrap()[row_idx].child, // by reference. meaning this must be mutated
-                    threshold,
-                    max_branches,
-                    singly
-                );
-
-                self.update_split_subclusters(
-                    row_idx,
-                    new_subcluster1, 
-                    new_subcluster2,
-                    singly
-                );
-
-                if self.subclusters.as_ref().unwrap().len() > self.max_branches {
-                    return true
-                }
-
-                return false
-            }
-
-        // when subclusters.child is None
-        } else {
-
-            let merged = self.subclusters.as_mut().unwrap()[row_idx].merge_subcluster(
-                subcluster.clone(), max_branches, threshold
+        
+        if split_child {
+            let (
+                new_subcluster1, new_subcluster2
+            ) = split_node(
+                &self.subclusters.as_mut().unwrap()[row_idx].child, // by reference. meaning this must be mutated
+                threshold,
+                max_branches,
+                singly
             );
 
-            debug!(
-                "Merged status: {}", merged
+            self.update_split_subclusters(
+                row_idx,
+                new_subcluster1, 
+                new_subcluster2,
+                singly
             );
-            
-            if merged {
 
-                let closest_subcluster = self.subclusters.as_mut().unwrap(); // Unwrap Option to get a mutable reference
-                let row = & closest_subcluster[row_idx].centroid;
-
-                // NOTE: this saves the first row of centroids
-                self.centroids
-                    .as_mut()
-                    .unwrap()
-                    .row_mut(row_idx)
-                    .copy_from(
-                        &row.clone().unwrap().row(0)
-                );
-                self.init_centroids
-                    .as_mut()
-                    .unwrap()
-                    .row_mut(row_idx)
-                    .copy_from(
-                        &row.clone().unwrap().row(0)
-                );
-
-                if !singly{
-                    // closest_subcluster.parent = ps; 
-                    self.subclusters.as_mut().unwrap()[row_idx] = parent;
-                }
-                return false
-
-            // not close to any other subclusters, and we still
-            // have space, so add.
-            } else if  self.subclusters.as_ref().unwrap().len() < self.max_branches {
-                self.append_subcluster(subcluster.clone());
-                if !singly{
-                    // closest_subcluster.parent = ps; 
-                    self.subclusters.as_mut().unwrap()[row_idx] = parent;
-                }
-
-                return false
-
-            // We do not have enough space nor is it closer to an
-            // other subcluster. We need to split.
-            } else {
-                // BUG: if the child node is none, and it doesn't merge and the length of the subclsuters
-                // are greater than max_branches, this is the last condition to deal with the molecule 
-                // However, there is a case where this can crash because the size of the centroids and init_centroids
-                // are not updated after appending, causing a panic when trying to access out of bounds row.
-                self.append_subcluster(subcluster.clone());
-
-                return true
-            }
+            return self.subclusters.as_ref().unwrap().len() > self.max_branches    
         }
 
-        // true // Rust compiler states it is an unreachable expression
+        self.subclusters
+            .as_mut()
+            .unwrap()[row_idx]
+            .update(
+                &subcluster, 
+                self.max_branches, 
+                self.n_features 
+            );
+
+        // NOTE: this saves the first row of centroids
+        self.init_centroids.as_mut()
+            .unwrap()
+            .row_mut(row_idx)
+            .copy_from(
+                &self.subclusters
+                    .as_ref()
+                    .unwrap()[row_idx]
+                    .centroid
+                    .clone()
+                    .unwrap()
+                    .row(0)
+            );
+        
+        self.centroids.as_mut()
+            .unwrap()
+            .row_mut(row_idx)
+            .copy_from(
+                &self.subclusters
+                    .as_ref()
+                    .unwrap()[row_idx]
+                    .centroid
+                        .clone()
+                        .unwrap()
+                        .row(0)
+            );
+
+        return false
+        
     }
 }
 
@@ -942,13 +923,6 @@ impl VoxBirch {
                 .prev_leaf = self.dummy_leaf.clone();
 
         }
-
-        // check if matrix is sparse
-        // NOTE: original BitBirch checks for sparse matrices
-        // This is not applicable here since we are convert 3D mols to voxel grids
-        // if not spars.issparse() {
-        //     panic!("Currently only sparse matrices are supported.");
-        // }
 
         for iter in 0..grids.nrows() {
             
