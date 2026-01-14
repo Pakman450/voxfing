@@ -185,8 +185,7 @@ fn max_separation(centroids: &DMatrix<f32>, max_branches: usize) -> (usize, usiz
 
     //This needs to calculate dot products for each row of centroids
     // with centroid. centrpoid has a shape of n_mols, n_features
-    let a_centroid: Vec<f32> = (centroids * centroid.transpose()).row(0).iter().cloned().collect();
-
+    let a_centroid: Vec<f32>= (centroids * &centroid.transpose()).column(0).iter().copied().collect();
 
     debug!(
         "max_separation: 
@@ -240,6 +239,10 @@ fn max_separation(centroids: &DMatrix<f32>, max_branches: usize) -> (usize, usiz
 
     let a_mol1 : Vec<f32> = (centroids * centroids.row(mol1).transpose()).as_slice().to_vec();
 
+    debug!("a_mol1: = {:?}, centroids * centroids.row(mol1).transpose(): = {}", 
+    a_mol1, 
+    centroids * centroids.row(mol1).transpose());
+
     let mut sims_mol1 : Vec<f32> = Vec::with_capacity(a_mol1.len());
 
     for i in 0..a_mol1.len() {
@@ -248,7 +251,7 @@ fn max_separation(centroids: &DMatrix<f32>, max_branches: usize) -> (usize, usiz
 
         debug!(
         "\n--- centroid {} ---
-        a_mol1:        {:?},
+        a_mol1:            {:?},
         centroid_norm_sq:  {:?},
         query_norm_sq:     {:?},
         union:             {:?},
@@ -275,7 +278,11 @@ fn max_separation(centroids: &DMatrix<f32>, max_branches: usize) -> (usize, usiz
     // # Get the similarity of each molecule to mol2
     // a_mol2 = np.dot(X, X[mol2])
     let a_mol2 : Vec<f32> = (centroids * centroids.row(mol2).transpose()).as_slice().to_vec();
-
+    debug!(
+        "a_mol2: = {:?}, centroids * centroids.row(mol2).transpose(): = {}", 
+        a_mol2, 
+        centroids * centroids.row(mol2).transpose()
+    );
     let mut sims_mol2 : Vec<f32> = Vec::with_capacity(a_mol2.len());
 
     for i in 0..a_mol2.len() {
@@ -283,8 +290,8 @@ fn max_separation(centroids: &DMatrix<f32>, max_branches: usize) -> (usize, usiz
         let score = a_mol2[i] / (union);
 
         debug!(
-        "--- centroid {} ---
-        a_mol2:        {:?},
+        "\n--- centroid {} ---
+        a_mol2:            {:?},
         centroid_norm_sq:  {:?},
         query_norm_sq:     {:?},
         union:             {:?},
@@ -564,13 +571,12 @@ impl BFNode {
 
         debug!("subclusters.len() = {}, after = {}", n_samples , &self.subclusters.as_ref().unwrap().len() );
 
-        // NOTE. THIS IS DIFFERENT FROM ORIGINAL CODE
-        // self.init_centroids.as_mut().unwrap().row_mut(n_samples).copy_from(&centroid.row(0));
+        // copy the centroid into the init_centroid
+        // n_samples is the last index BEFORE we pushed into subclusters. 
         let num_rows = self.init_centroids.as_ref().unwrap().nrows();
         if n_samples < num_rows {
             self.init_centroids.as_mut().unwrap().row_mut(n_samples).copy_from(&centroid.row(0));
         } else {
-            // Handle the error, possibly initialize more rows or log a message
             error!("n_samples out of bounds. init_centroids has {} rows, but tried to access {}th row", num_rows, n_samples+1);
         }
 
@@ -617,8 +623,6 @@ impl BFNode {
         mut parent: BFSubcluster,
         singly: bool
     ) -> bool {
-
-
 
         if self.subclusters.is_none() {
             self.append_subcluster(subcluster.clone());
@@ -673,6 +677,18 @@ impl BFNode {
             );
 
             if !merged {
+                if self.subclusters.as_ref().unwrap().len() >= self.max_branches + 1 {
+                    println!(
+                        "
+                        The child node of the closest subcluster is None, and
+                        merging criteria has not met. With this: VoxBirch reached
+                        max branches. This typically means your molecules are  
+                        very diverse, and requires more lenient clustering. 
+                        Consider lowering threshold or more branches to cluster 
+                        effectively.
+                        "
+                    );
+                }
                 self.append_subcluster(subcluster.clone());
                 return self.subclusters.as_ref().unwrap().len() > self.max_branches
             }
