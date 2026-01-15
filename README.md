@@ -20,7 +20,7 @@ or visit `https://rust-lang.org/learn/get-started/`
 
 Then pull the voxbirch repository from github.
 
-`git clone https://github.com/Pakman450/voxfing`
+`git clone https://github.com/Pakman450/voxbirch`
 
 `cd` into `voxfing`, then run 
 
