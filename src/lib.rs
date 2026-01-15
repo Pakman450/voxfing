@@ -89,6 +89,8 @@ mod tests {
                 [12, 3, 5], 
                 2.0, 0.0, 0.0, 0.0
             ); 
+        
+        let l_titles = vec!["ZINC000004771104", "ZINC000108479470"];
 
         for (i,mol) in l_mols.iter().enumerate() {
             let num_atoms = mol.num_atoms();
@@ -99,6 +101,7 @@ mod tests {
             assert_eq!(num_atoms,condense_sum as usize);
             assert_eq!(num_atoms, sum as usize);
             assert_eq!(12*3*5, total_length);
+            assert_eq!(grids[i].title, l_titles[i]);
         }
 
     }
@@ -155,5 +158,67 @@ mod tests {
             ),
             "(0.000,0.000,0.000): 52,10,20"
         );
+    }
+
+    #[test]
+    fn cluster_and_writeout(){
+        use std::path::Path;
+        use nalgebra::DMatrix;
+
+        let file_path = 
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("test_files/two.mol2");
+
+        let l_mols = 
+            read_mol2_file(Path::new(&file_path))
+            .expect("Failed to read MOL2 file"); 
+
+        let grids = 
+            voxelize(
+                &l_mols, 
+                [12, 3, 5], 
+                2.0, 0.0, 0.0, 0.0
+            ); 
+
+        let mut titles: Vec<String> = Vec::new();
+
+        for grids in grids.iter() {
+            titles.push(grids.title.clone());
+        }
+
+        let num_rows = grids.len();
+        let num_cond_cols = grids[0].condensed_data.len(); 
+        let num_cols = grids[0].data.len(); 
+        let num_cond_cols_sec = grids[1].condensed_data.len(); 
+        let num_cols_sec = grids[1].data.len(); 
+
+        assert_eq!(num_rows, 2);
+        assert_eq!(num_cond_cols, 12);
+        assert_eq!(num_cols, num_cols_sec);
+        assert_eq!(num_cond_cols_sec, 12);
+
+        let mut vb = VoxBirch::new(
+            0.50, 
+            10
+        );
+
+        let mut input_matrix: DMatrix<f32> = DMatrix::zeros(
+            num_rows, 
+            num_cols
+        );
+
+        for (i, grids) in grids.iter().enumerate() {
+            for (j, &value) in grids.data.iter().enumerate() {
+                input_matrix[(i, j)] = value as f32; // Convert u8 to f32 and assign
+            }
+        }
+
+        vb.fit(&input_matrix, titles, true);
+
+        let cluster_mol_ids: Vec<Vec<String>> = vb.get_cluster_mol_ids();
+
+        assert_eq!(cluster_mol_ids.len(),2);
+        assert_eq!(cluster_mol_ids[0][0],"ZINC000004771104");
+        assert_eq!(cluster_mol_ids[1][0],"ZINC000108479470");
+
     }
 }
