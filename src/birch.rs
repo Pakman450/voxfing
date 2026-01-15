@@ -708,7 +708,7 @@ impl BFNode {
     pub fn insert_bf_subcluster(
         &mut self,
         subcluster: BFSubcluster,
-        mut parent: BFSubcluster,
+        parent: BFSubcluster,
         singly: bool
     ) -> bool {
 
@@ -1121,6 +1121,8 @@ impl VoxBirch {
         titles: Vec<String>, 
         singly: bool) -> &mut VoxBirch 
         {
+
+        assert_eq!(grids.nrows(), titles.len());
 
         println!("\n#############################\nFitting grids with the VoxBirch Clustering\n#############################\n\n");
         let n_features = grids.ncols();

@@ -1,5 +1,78 @@
+# VoxBirch
 
+VoxBirch is an voxel-based ultra-fast clustering algorithm 
+that scales at large-scale for molecules in 3D. The 
+VoxBirch takes advantage of the Balanced Iterative 
+Reducing and Clustering using Hierarchies or BIRCH 
+algorithm to efficently cluster 3D molecules at linear 
+time. 
 
-## Commands
+## How to build
 
-`RUST_BACKTRACE=1 cargo run --bin voxelize -- --path ./src/files/mol.mol2 --dims 50,50,50 --origin 20,6,54`
+### Install `rustup`
+You must install `cargo` by install `rustup`to build voxbirch
+
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+or visit `https://rust-lang.org/learn/get-started/`
+
+Then pull the voxbirch repository from github.
+
+`git clone https://github.com/Pakman450/voxfing`
+
+`cd` into `voxfing`, then run 
+
+```
+make install
+```
+
+and you will see your `voxbirch` binary in `./bin`
+
+To clean up your binary, run
+
+```
+make clean
+```
+
+## Usage flags
+
+```
+Usage: voxbirch [OPTIONS] --path <PATH>
+
+Options:
+  -p, --path <PATH>
+          Path to the MOL2 file (required)
+  -d, --dims <DIMS>
+          Dimensions of the voxel grid (x, y, z), comma separated [default: 20,20,20]
+  -r, --resolution <RESOLUTION>
+          Resolution of the voxel grid in Angstroms [default: 2]
+  -o, --origin <ORIGIN>
+          Target origin x0 y0 z0 via comma separated string [default: 0.0,0.0,0.0]
+  -t, --threshold <THRESHOLD>
+          Threshold of similarity [default: 0.65]
+  -m, --max-branches <MAX_BRANCHES>
+          Number of max branches [default: 50]
+      --output-file-path <OUTPUT_FILE_PATH>
+          Clustered mol ids output name [default: ./clustered_mol_ids.txt]
+      --no-condense
+          Do not condense voxel grids. Leaving this out condenses grids
+  -v, --verbosity...
+          Verbosity level
+  -h, --help
+          Print help
+  -V, --version
+          Print version
+```
+
+### Example commands
+
+If you want to cluster molecules with 10 max_branches:
+
+```
+voxbirch -p molecules.mol2 -m 10
+```
+
+Then you should get a list of clustered molecules via id, `clusters_mol_ids.txt`
+

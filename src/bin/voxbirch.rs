@@ -1,8 +1,8 @@
-use voxelizer::voxelize;
-use voxelizer::read_mol2_file;
-use voxelizer::write_cluster_mol_ids;
-use voxelizer::birch::VoxBirch;
-use voxelizer::get_recommended_info;
+use voxbirch::voxelize;
+use voxbirch::read_mol2_file;
+use voxbirch::write_cluster_mol_ids;
+use voxbirch::birch::VoxBirch;
+use voxbirch::get_recommended_info;
 
 use std::path::{Path};
 use nalgebra::DMatrix;
@@ -12,35 +12,38 @@ use std::env;
 use env_logger::{Builder};
 use std::io::Write;
 
-
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Path to the MOL2 file
-    #[arg(short, long)]
+    /// Path to the MOL2 file (required)
+    #[arg(short, long, required = true)]
     path: String,
 
     /// Dimensions of the voxel grid (x, y, z), comma separated
     #[arg(short, long, value_delimiter = ',', default_value = "20,20,20")]
     dims: Vec<usize>,
 
-    /// resolution of the voxel grid
+    /// Resolution of the voxel grid in Angstroms
     #[arg(short, long, default_value_t = 2.0)]
     resolution: f32,
 
-    /// target origin x0 y0 z0, comma separated
+    /// Target origin x0 y0 z0 via comma separated string
     #[arg(short, long, value_delimiter = ',', default_value = "0.0,0.0,0.0")]
     origin: Vec<f32>,
 
-    // threshold
+    /// Threshold of similarity
     #[arg(short, long, default_value_t = 0.65)]
     threshold: f32,
 
-    // max_branches
+    /// Number of max branches
     #[arg(short, long, default_value_t = 50)]
     max_branches: usize,
 
-    // no_condense
+    /// Clustered mol ids output name
+    #[arg(long, default_value = "./clustered_mol_ids.txt")]
+    output_file_path: String,
+
+    /// Do not condense voxel grids. Leaving this out condenses grids.
     #[arg(long)]
     no_condense: bool,
 
@@ -58,7 +61,7 @@ fn main() {
     let start_time = Instant::now();
 
     // Print the ASCII art
-    voxelizer::ascii::print_ascii_art();
+    voxbirch::ascii::print_ascii_art();
         
     // Argument unpacking
     let args = Args::parse();
@@ -72,6 +75,7 @@ fn main() {
     let resolution = args.resolution;
     let threshold = args.threshold;
     let max_branches = args.max_branches;
+    let clustered_mol_id_string = args.output_file_path;
     let no_condense = args.no_condense;
     let verbosity = args.verbosity;
 
@@ -153,7 +157,7 @@ fn main() {
 
     // Get the number of rows (which is the number of VoxelGrids)
     let num_rows = grids.len();
-    let mut num_cols;
+    let num_cols;
 
     if !no_condense {
         num_cols = grids[0].condensed_data.len(); 
@@ -208,7 +212,7 @@ fn main() {
 
     // Get results after clustering. 
     let cluster_mol_ids = vb.get_cluster_mol_ids();
-    let path_cluster_ids: String = String::from("./clusters_mol_ids.txt");
+    let path_cluster_ids: String = String::from(clustered_mol_id_string);
     let write_to_path = Path::new(&path_cluster_ids);
     let _ = write_cluster_mol_ids(&write_to_path, &cluster_mol_ids);
 
