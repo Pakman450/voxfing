@@ -31,7 +31,8 @@ mod tests {
     #[test]
     fn voxelize_mol(){
         use std::path::Path;
-        let file_path = String::from("./test_files/one.mol2");
+        let file_path = 
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("test_files/two.mol2");
 
         let l_mols = 
             read_mol2_file(Path::new(&file_path))
@@ -59,7 +60,8 @@ mod tests {
     #[test]
     fn read_in_two_mol() {
         use std::path::Path;
-        let file_path = String::from("./test_files/two.mol2");
+        let file_path = 
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("test_files/two.mol2");
 
         let l_mols = 
             read_mol2_file(Path::new(&file_path))
@@ -74,7 +76,8 @@ mod tests {
     #[test]
     fn voxelize_two_mols(){
         use std::path::Path;
-        let file_path = String::from("./test_files/two.mol2");
+        let file_path = 
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("test_files/two.mol2");
 
         let l_mols = 
             read_mol2_file(Path::new(&file_path))
@@ -104,7 +107,8 @@ mod tests {
     fn get_rec_info(){
         use std::path::Path;
 
-        let file_path = String::from("./test_files/two.mol2");
+        let file_path = 
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("test_files/two.mol2");
 
         let l_mols = 
             read_mol2_file(Path::new(&file_path))
