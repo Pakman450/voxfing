@@ -193,6 +193,10 @@ fn main() {
         }
     }
 
+    if !input_matrix.iter().any(|&x| x != 0.0) {
+        panic!("All of your voxels for all rows have 0.0s ");
+    }
+
     // Collect titles
     for grids in grids.iter() {
         titles.push(grids.title.clone());
