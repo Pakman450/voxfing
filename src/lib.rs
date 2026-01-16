@@ -214,7 +214,7 @@ mod tests {
             }
         }
 
-        vb.fit(&input_matrix, titles, true);
+        vb.fit(&input_matrix, titles);
 
         let cluster_mol_ids: Vec<Vec<String>> = vb.get_cluster_mol_ids();
 
