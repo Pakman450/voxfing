@@ -359,8 +359,7 @@ fn calc_centroid( ls: &Vec<f32>, nj: u32, max_branches: usize, n_features: usize
 fn split_node(
     node_child: &Option<Rc<RefCell<BFNode>>>,
     threshold: f32,
-    max_branches: usize,
-    singly: bool
+    max_branches: usize
 )-> (BFSubcluster, BFSubcluster){
 
 
@@ -398,7 +397,6 @@ fn split_node(
                     max_branches,
                     node.is_leaf,
                     n_features,
-                    //dtype=node.init_centroids_.dtype
                     node.d_type,
                 )));
 
@@ -407,7 +405,6 @@ fn split_node(
                     max_branches,
                     node.is_leaf,
                     n_features,
-                    //dtype=node.init_centroids_.dtype
                     node.d_type,
                 )));
     
@@ -473,22 +470,12 @@ fn split_node(
         if node1_closer[idx] {
             new_node1.borrow_mut().append_subcluster(subcluster.clone());
             new_subcluster1.update(subcluster, max_branches, n_features);
-            if !singly {
-                subcluster.parent = Some(Rc::new(RefCell::new(
-                    Parent::Subcluster(new_subcluster1.clone())
-                )));
-            }
+
         // It could be possible that the second sublcuster was never updated due
         // to this if then logic. 
         } else {
             new_node2.borrow_mut().append_subcluster(subcluster.clone());
             new_subcluster2.update(subcluster, max_branches, n_features);
-            if !singly {
-                // let parent_subcluster = Parent::Subcluster(new_subcluster2.clone());
-                subcluster.parent = Some(Rc::new(RefCell::new(
-                    Parent::Subcluster(new_subcluster2.clone())
-                )));
-            }
         }
     }
 
@@ -506,8 +493,6 @@ fn find_closest_subluster(
 
     // perform dot product between two matrices. not inner dot product
     let a = centroids * &centroid.transpose();
-
-    // print out using debug! if centroids or centroid have any non zeros
 
     debug!(
         "a: = {},
@@ -682,14 +667,9 @@ impl BFNode {
     fn update_split_subclusters(
         & mut self,
         row_idx: usize , 
-        mut new_subcluster1: BFSubcluster ,
-        mut new_subcluster2: BFSubcluster ,
-        singly : bool
+        new_subcluster1: BFSubcluster ,
+        new_subcluster2: BFSubcluster
     ) {
-        if !singly {
-            new_subcluster1.parent = self.subclusters.as_ref().unwrap()[0].parent.clone();
-            new_subcluster2.parent = self.subclusters.as_ref().unwrap()[0].parent.clone();
-        }
 
         // ind = self.subclusters.index()
         self.subclusters.as_mut().unwrap()[row_idx] = new_subcluster1.clone();
@@ -708,8 +688,7 @@ impl BFNode {
     pub fn insert_bf_subcluster(
         &mut self,
         subcluster: BFSubcluster,
-        parent: BFSubcluster,
-        singly: bool
+        parent: BFSubcluster
     ) -> bool {
 
         debug!("
@@ -812,10 +791,6 @@ impl BFNode {
                     &row.clone().unwrap().row(0)
             );
 
-            if !singly{
-                // closest_subcluster.parent = ps; 
-                self.subclusters.as_mut().unwrap()[row_idx] = parent;
-            }
             return false
 
         }
@@ -831,8 +806,7 @@ impl BFNode {
                     .borrow_mut()
                     .insert_bf_subcluster(
                         subcluster.clone(),
-                        parent.clone(),
-                        singly
+                        parent.clone()
                 );
         
         if split_child {
@@ -841,16 +815,14 @@ impl BFNode {
             ) = split_node(
                 &self.subclusters.as_mut().unwrap()[row_idx].child, // by reference. meaning this must be mutated
                 threshold,
-                max_branches,
-                singly
+                max_branches
             );
 
             // this includes append_subcluster
             self.update_split_subclusters(
                 row_idx,
                 new_subcluster1, 
-                new_subcluster2,
-                singly
+                new_subcluster2
             );
 
             return self.subclusters.as_ref().unwrap().len() > self.max_branches    
@@ -1119,7 +1091,7 @@ impl VoxBirch {
         &mut self, 
         grids : &DMatrix<f32>, 
         titles: Vec<String>, 
-        singly: bool) -> &mut VoxBirch 
+        ) -> &mut VoxBirch 
         {
 
         assert_eq!(grids.nrows(), titles.len());
@@ -1203,8 +1175,7 @@ impl VoxBirch {
                     // Here, BitBirch feeds in subcluster.parent_
                     // But since Rust is a strongly typed language
                     // we must send in BFSubcluster rather than. BFNode.
-                    subcluster.clone(),
-                    singly
+                    subcluster.clone()
             );
 
             if split {
@@ -1212,8 +1183,7 @@ impl VoxBirch {
                 let (new_subcluster1, new_subcluster2) = split_node(
                     &self.root,
                     self.threshold,
-                    self.max_branches,
-                    singly
+                    self.max_branches
                 );
 
                 self.root = None;
@@ -1236,32 +1206,6 @@ impl VoxBirch {
                     .borrow_mut()
                     .append_subcluster(new_subcluster2.clone());       
 
-                if !singly {
-                    // Iterate over subclusters in new_subcluster1
-                    if let Some(child_node1) = &new_subcluster1.child {
-                        if let Some(subclusters1) = &child_node1.borrow().subclusters {
-                            for subcluster in subclusters1 {
-                                if let Some(parent) = &subcluster.parent {
-                                    // Mutate the parent reference to point to new_subcluster1
-                                    *parent.borrow_mut() = Parent::Subcluster(new_subcluster1.clone());
-                                }
-                            }
-                        }
-                    }
-
-                    // Iterate over subclusters in new_subcluster2
-                    if let Some(child_node2) = &new_subcluster2.child {
-                        if let Some(subclusters2) = &child_node2.borrow().subclusters {
-                            for subcluster in subclusters2 {
-                                if let Some(parent) = &subcluster.parent {
-                                    // Mutate the parent reference to point to new_subcluster2
-                                    *parent.borrow_mut() = Parent::Subcluster(new_subcluster2.clone());
-                                }
-                            }
-                        }
-                    }
-
-                }
             }
             self.index_tracker += 1;
         }
