@@ -3,14 +3,15 @@ use voxbirch::read_mol2_file;
 use voxbirch::write_cluster_mol_ids;
 use voxbirch::birch::VoxBirch;
 use voxbirch::get_recommended_info;
+use voxbirch::calc_time_breakdown;
 
 use std::path::{Path};
 use nalgebra::DMatrix;
 use clap::Parser;
 use std::time::{Instant};
-use std::env;
 use env_logger::{Builder};
 use std::io::Write;
+use log::LevelFilter;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -47,13 +48,43 @@ struct Args {
     #[arg(long)]
     no_condense: bool,
 
-    /// Verbosity level
+    /// Verbosity level. -v means level 1, -vvv means level 3 
     #[arg(short, long, action = clap::ArgAction::Count, default_value_t = 0)]
     verbosity: u8,
 
 }
 
+fn init_logging(verbosity: u8) {
+    let mut builder = Builder::new();
 
+    match verbosity {
+        0 => builder.filter_level(LevelFilter::Warn),   // default
+        1 => builder.filter_level(LevelFilter::Info),
+        2 => builder.filter_level(LevelFilter::Debug),
+        _ => builder.filter_level(LevelFilter::Trace),
+    };
+
+    builder.format(|buf, record| {
+
+        let level_style = buf.default_level_style(record.level());
+        let level = level_style.value(record.level());
+
+        let file = record.file().unwrap_or("unknown");
+        let line = record.line().unwrap_or(0);
+
+        writeln!(
+            buf,
+            "[{} {}:{} {}] {}",
+            level,
+            file,
+            line,
+            record.target(),
+            record.args()
+        )
+    });
+    
+    builder.init();
+}
 
 fn main() {
 
@@ -77,38 +108,7 @@ fn main() {
     let max_branches = args.max_branches;
     let clustered_mol_id_string = args.output_file_path;
     let no_condense = args.no_condense;
-    let verbosity = args.verbosity;
-
-    // Initialize the logger with appropriate level
-    if verbosity == 2 {
-        // Set RUST_LOG to debug level if verbose
-        env::set_var("RUST_LOG", "debug");
-        env::set_var("RUST_LOG", "warn");
-        env::set_var("RUST_LOG", "info");
-        env::set_var("RUST_LOG", "error");
-        env::set_var("RUST_LOG", "trace");
-    } 
-
-    // Initialize the logger with custom format
-    Builder::from_default_env()
-        .format(|buf, record| {
-            // IMPORTANT: keep the style alive
-            let level_style = buf.default_level_style(record.level());
-            let level = level_style.value(record.level());
-
-            let file = record.file().unwrap_or("unknown");
-            let line = record.line().unwrap_or(0);
-
-            writeln!(
-                buf,
-                "[{} {}:{} {}] {}",
-                level,
-                file,
-                line,
-                record.target(),
-                record.args()
-            )
-        }).init();
+    init_logging(args.verbosity);
 
     // Read MOL2 file
     let path = Path::new(&file_path);
@@ -155,8 +155,12 @@ fn main() {
     // Voxelization of molecules's xyz's
     let grids = voxelize(&l_mols, [dimx, dimy, dimz], resolution, x0, y0, z0); 
 
+    let voxelize_duration: std::time::Duration = start_time.elapsed();
+
     // Get the number of rows (which is the number of VoxelGrids)
     let num_rows = grids.len();
+
+    // Get the number of cols (which is the number of voxels)
     let num_cols;
 
     if !no_condense {
@@ -164,14 +168,8 @@ fn main() {
     } else{
         num_cols = grids[0].data.len(); 
     }
-
+    
     println!("Shape of data: ({} molecules, {} voxels)", num_rows, num_cols);
-
-    // Initialize VoxBirch
-    let mut vb = VoxBirch::new(
-        threshold, 
-        max_branches
-    );
 
     // Create the DMatrix with the correct size
     let mut input_matrix: DMatrix<f32> = DMatrix::zeros(
@@ -179,17 +177,13 @@ fn main() {
         num_cols
     );
 
-    let mut titles: Vec<String> = Vec::new();
-
     if !no_condense {
-        // Fill the matrix with the data from each VoxelGrid
         for (i, grids) in grids.iter().enumerate() {
             for (j, &value) in grids.condensed_data.iter().enumerate() {
                 input_matrix[(i, j)] = value as f32; // Convert u8 to f32 and assign
             }
         }
     } else{
-        // Fill the matrix with the data from each VoxelGrid
         for (i, grids) in grids.iter().enumerate() {
             for (j, &value) in grids.data.iter().enumerate() {
                 input_matrix[(i, j)] = value as f32; // Convert u8 to f32 and assign
@@ -197,40 +191,67 @@ fn main() {
         }
     }
 
+    let mut vb = VoxBirch::new(
+        threshold, 
+        max_branches
+    );
+
     if !input_matrix.iter().any(|&x| x != 0.0) {
         panic!("All of your voxels for all rows have 0.0s ");
     }
 
-    // Collect titles
-    for grids in grids.iter() {
-        titles.push(grids.title.clone());
-    }
-
     // start clustering
-    vb.fit(&input_matrix, titles, true);
-
+    vb.fit(
+        &input_matrix, 
+        grids.iter().map(|g| g.title.clone()).collect()
+    );
 
     // Get results after clustering. 
-    let cluster_mol_ids = vb.get_cluster_mol_ids();
+    let cluster_mol_ids: Vec<Vec<String>> = vb.get_cluster_mol_ids();
+    let num_clusters = cluster_mol_ids.len();
     let path_cluster_ids: String = String::from(clustered_mol_id_string);
     let write_to_path = Path::new(&path_cluster_ids);
     let _ = write_cluster_mol_ids(&write_to_path, &cluster_mol_ids);
 
-    // Get the elapsed time
-    let duration = start_time.elapsed();
+    // Get the breakdown of elapsed time
+    let (
+        vox_hours,
+        vox_minutes,
+        vox_seconds,
+        vox_milliseconds
+    ) = calc_time_breakdown(&voxelize_duration);
 
-    // Get total seconds and calculate hours, minutes, seconds
-    let total_secs = duration.as_secs();
-    let hours = total_secs / 3600;
-    let minutes = (total_secs % 3600) / 60;
-    let seconds = total_secs % 60;
+    let total_duration: std::time::Duration = start_time.elapsed();
+    let (
+        tot_hours,
+        tot_minutes,
+        tot_seconds,
+        tot_milliseconds
+    ) = calc_time_breakdown(&total_duration);
 
-    // Get milliseconds from remaining nanoseconds
-    let milliseconds = duration.subsec_millis();
-
-    // Format the time as a string
     println!(
-        "\nFinished\nElapsed time: {}h {}m {}s {}ms",
-        hours, minutes, seconds, milliseconds
+"\nFinished
+Summary statistics:
+Total number of clusters: {}
+Elapsed time for Voxelization: {}h {}m {}s {}ms
+Elapsed time for Clustering: {}h {}m {}s {}ms
+Total Elapsed time: {}h {}m {}s {}ms",
+        num_clusters,
+        
+        vox_hours, 
+        vox_minutes,
+        vox_seconds, 
+        vox_milliseconds,
+        
+        tot_hours - vox_hours, 
+        tot_minutes - vox_minutes, 
+        tot_seconds - vox_seconds, 
+        tot_milliseconds - vox_milliseconds,
+        
+        tot_hours, 
+        tot_minutes, 
+        tot_seconds, 
+        tot_milliseconds
     );
+
 }
